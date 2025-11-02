@@ -1,0 +1,37 @@
+### Intellij ###
+.idea/
+out/
+.idea_modules/
+
+### SBT ###
+
+dist/*
+target/
+lib_managed/
+src_managed/
+project/boot/
+project/plugins/project/
+.history
+.cache
+.lib/
+.bsp/
+
+### Scala ###
+*.class
+*.log
+
+### Local ###
+.env
+.DS_Store
+local.conf
+local-dir/
+.sbtopts
+repositories-ci
+
+### VS Code
+.vscode/
+
+### Metals
+.bloop/
+.metals/
+metals.sbt

@@ -1,0 +1,15 @@
+image: sbtscala/scala-sbt:eclipse-temurin-alpine-21.0.8_9_1.11.7_2.13.17
+
+stages:
+  - build-and-test
+
+build:
+  stage: build-and-test
+  interruptible: true
+  allow_failure: false
+  rules:
+    - if: $CI_MERGE_REQUEST_ID || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: always
+    - when: never
+  script:
+    - sbt "scalafmtCheckAll; scalafmtSbtCheck; scalafixEnable; scalafixAll --check; compile; test;"
