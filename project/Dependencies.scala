@@ -6,4 +6,5 @@ object Dependencies {
   val bmFor         = "com.olegpy"     %% "better-monadic-for" % "0.3.1"
 
   val catsEffect = "org.typelevel" %% "cats-effect" % "3.6.3"
+  val scalaTest      = "org.scalatest"     %% "scalatest"                     % "3.2.19"
 }

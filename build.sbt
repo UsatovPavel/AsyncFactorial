@@ -14,6 +14,8 @@ lazy val root: Project = (project in file("."))
     name := "individual-task",
     libraryDependencies ++= List(
       Dependencies.catsEffect,
+      Dependencies.scalaTest  % Test,
+      Dependencies.catsEffect
     ),
     tpolecatExcludeOptions += ScalacOptions.warnNonUnitStatement,
     tpolecatScalacOptions += ScalacOption(
