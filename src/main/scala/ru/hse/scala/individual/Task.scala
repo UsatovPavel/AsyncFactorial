@@ -6,7 +6,7 @@ import cats.implicits.{catsSyntaxFlatMapOps, toFlatMapOps, toFunctorOps}
 //import cats.syntax.all._ // import for syntax
 
 object Task extends IOApp {
-  private def taskProducer[F[_]: Concurrent: Console](taskConsumer: FiberIO[Unit], queue: Queue[F, Deferred[F, Either[ParseError, BigInt]]]) = {
+  private def taskProducer[F[_]: Concurrent: Console](taskConsumer: Fiber[F, Throwable, Unit], queue: Queue[F, Deferred[F, Either[ParseError, BigInt]]]) = {
     def loop:F[Unit] = (Console[F].println("Enter factorial:") >>
       Console[F].readLine.flatMap { text =>
         text.trim match {
@@ -14,6 +14,7 @@ object Task extends IOApp {
             Console[F].println("Exit")
             taskConsumer.cancel
           }
+          case _ =>
             for {
               deferred <- Deferred[F, Either[ParseError, BigInt]]
               _        <- queue.offer(deferred)
