@@ -13,7 +13,8 @@ import scala.util.Random
 
 object NumberWriterSpec extends SimpleIOSuite {
   val defaultPath: Path = new NumberWriter[IO]().outputFilepath
-
+  val smallList: List[Right[Nothing, BigInt]] = List(Right(BigInt(10)), Right(BigInt(20)), Right(BigInt(30)), Right(BigInt(40)))
+  val greatList: List[Right[Nothing, BigInt]] = List.fill(100)(Right(BigInt(Random.nextInt(1000000))))//большие данные потребуют больше 0.2 с
   def outFileResource: Resource[IO, Path] =
     Resource.make {
       val tmp = Path(s"out-${UUID.randomUUID()}.txt")
@@ -85,8 +86,6 @@ object NumberWriterSpec extends SimpleIOSuite {
   }
 
   test("process write multiply data") {
-    val smallList = List(Right(BigInt(10)), Right(BigInt(20)), Right(BigInt(30)), Right(BigInt(40)))
-    val greatList = List.fill(100)(Right(BigInt(Random.nextInt(1000000))))//большие данные потребуют больше 0.2 с
     val smallExpected: List[String] = smallList.map(elem => elem.value.toString).appended("")
     val greatExpected: List[String] = greatList.map(elem => elem.value.toString).appended("")
     for {
