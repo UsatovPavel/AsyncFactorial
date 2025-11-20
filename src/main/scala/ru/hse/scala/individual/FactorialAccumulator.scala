@@ -1,11 +1,9 @@
 package ru.hse.scala.individual
 
-import cats.effect.Sync
-import cats.effect.std.Queue
+import cats.effect.Deferred
 import ru.hse.scala.individual.ParseError.{NegativeNumberError, UnknownError, WrongNumberError}
 
 import scala.annotation.tailrec
-import scala.concurrent.Promise
 
 sealed trait ParseError
 object ParseError {
@@ -18,18 +16,19 @@ class FactorialAccumulator {
 }
 
 object FactorialAccumulator {
-  def processInput[F[_]: Sync](line: String, promise: Promise[Either[ParseError, BigInt]])= {
+
+  def inputNumber[F[_]](line: String, deferred: Deferred[F, Either[ParseError, BigInt]]): F[Boolean] = {
     val maybeNumber = line.trim.toIntOption
     maybeNumber match {
-      case None => promise.success(Left(WrongNumberError(line)))
+      case None => deferred.complete(Left(WrongNumberError(line)))
       case Some(number)=> {
         if (number<0){
-          promise.success(Left(NegativeNumberError(number)))
+          deferred.complete(Left(NegativeNumberError(number)))
         } else {
           val optionalFactorial = factorial(number)
           optionalFactorial match {
-            case None => promise.success(Left(UnknownError))
-            case Some(result)=>promise.success(Right(result))
+            case None => deferred.complete(Left(UnknownError))
+            case Some(result)=>deferred.complete(Right(result))
           }
           }
         }

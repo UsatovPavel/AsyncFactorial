@@ -7,4 +7,8 @@ object Dependencies {
 
   val catsEffect = "org.typelevel" %% "cats-effect" % "3.6.3"
   val scalaTest      = "org.scalatest"     %% "scalatest"                     % "3.2.19"
+  val fs2Core       = "co.fs2" %% "fs2-core" % "3.7.0"
+  val fs2Io         = "co.fs2" %% "fs2-io"   % "3.7.0"
+  val weaverCats      = "com.disneystreaming" %% "weaver-cats"      % "0.8.3"
+  val weaverScalaCheck = "com.disneystreaming" %% "weaver-scalacheck" % "0.8.3"
 }

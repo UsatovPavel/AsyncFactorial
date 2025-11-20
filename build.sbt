@@ -15,7 +15,10 @@ lazy val root: Project = (project in file("."))
     libraryDependencies ++= List(
       Dependencies.catsEffect,
       Dependencies.scalaTest  % Test,
-      Dependencies.catsEffect
+      Dependencies.fs2Core,
+      Dependencies.fs2Io,
+      Dependencies.weaverCats % Test,
+      Dependencies.weaverScalaCheck % Test
     ),
     tpolecatExcludeOptions += ScalacOptions.warnNonUnitStatement,
     tpolecatScalacOptions += ScalacOption(
