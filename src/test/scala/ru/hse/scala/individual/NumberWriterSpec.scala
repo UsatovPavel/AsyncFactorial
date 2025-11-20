@@ -2,62 +2,104 @@ package ru.hse.scala.individual
 
 import cats.effect.std.Queue
 import cats.effect.{Deferred, IO, Resource}
+import cats.implicits.{toFoldableOps, toTraverseOps}
+import fs2.io.file.{Files, Path}
 import ru.hse.scala.individual.ParseError.NegativeNumberError
-import weaver.IOSuite
+import weaver.SimpleIOSuite
 
-import java.nio.charset.StandardCharsets
-import java.nio.file.{Files => JFiles, Path => JPath}
-import scala.concurrent.duration._
-import scala.jdk.CollectionConverters._
+import java.util.UUID
+import scala.concurrent.duration.DurationInt
+import scala.util.Random
 
-class NumberWriterSpec extends IOSuite {
-  override type Res = JPath
+object NumberWriterSpec extends SimpleIOSuite {
+  val defaultPath: Path = new NumberWriter[IO]().outputFilepath
 
-  override def sharedResource: Resource[IO, JPath] = {
-    Resource.make(
-      IO {
-        val prev = System.getProperty("user.dir")
-        val dir = JFiles.createTempDirectory("number-writer-test")
-        System.setProperty("user.dir", dir.toString)
-        (dir, prev)
-      }
-    ) { case (dir, prev) =>
-      IO {
-        System.setProperty("user.dir", prev)
-        val stream = JFiles.walk(dir).iterator().asScala.toList.reverse
-        stream.foreach(p => JFiles.deleteIfExists(p))
-      }
-    }.map(_._1)
+  def outFileResource: Resource[IO, Path] =
+    Resource.make {
+      val tmp = Path(s"out-${UUID.randomUUID()}.txt")
+      Files[IO].deleteIfExists(tmp).as(tmp)
+    } { path =>
+      Files[IO].deleteIfExists(path).void
+    }
+
+  sealed trait ExecuteType {}
+  object ExecuteType {
+    case class Sequential() extends ExecuteType
+    case class Parallel() extends ExecuteType
   }
 
-  test("process writes number to out.txt on Right") { dir =>
-    for {
-      queue <- Queue.unbounded[IO, Deferred[IO, Either[ParseError, BigInt]]]
-      writer = new NumberWriter[IO]()
-      deferred <- Deferred[IO, Either[ParseError, BigInt]]
-      fiber <- writer.run(queue).start
-      _ <- queue.offer(deferred)
-      _ <- deferred.complete(Right(BigInt(42)))
-      _ <- IO.sleep(200.millis)
-      exists <- IO(JFiles.exists(dir.resolve("out.txt")))
-      content <- IO {
-        if (exists) new String(JFiles.readAllBytes(dir.resolve("out.txt")), StandardCharsets.UTF_8) else ""
+  def executeQueue(resultsList: List[Either[ParseError, BigInt]], executeType: ExecuteType): IO[List[String]] = {
+    def foldSequential(queue:  Queue[IO, Deferred[IO, Either[ParseError, BigInt]]]): IO[Unit] = {
+      resultsList.traverse_ { r =>
+        for {
+          d <- Deferred[IO, Either[ParseError, BigInt]]
+          _ <- queue.offer(d)
+          _ <- IO.sleep(20.millis)
+          _ <- d.complete(r)
+          _ <- d.get
+        } yield ()
       }
-      _ <- fiber.cancel
-    } yield expect(exists && content.trim == "42")
+    }
+    def foldParallel(queue:  Queue[IO, Deferred[IO, Either[ParseError, BigInt]]]): IO[Unit] = {
+      for {
+        deferreds <- resultsList.traverse(_ => Deferred[IO, Either[ParseError, BigInt]])
+        _ <- deferreds.traverse(d => queue.offer(d))
+        _ <- deferreds.zip(resultsList).traverse{ case (d, r) => d.complete(r) }
+        _ <- deferreds.traverse(_.get)
+      } yield ()
+    }
+    outFileResource.use { path =>
+      for {
+        queue <- Queue.unbounded[IO, Deferred[IO, Either[ParseError, BigInt]]]
+        fiber <- new NumberWriter[IO](path).run(queue).start
+        effect: IO[Unit] = executeType match {
+          case ExecuteType.Sequential() => foldSequential(queue)
+          case ExecuteType.Parallel()   => foldParallel(queue)
+        }
+        _ <- effect
+        _ <- IO.sleep(200.millis)
+        lines <- Files[IO]
+          .readAll(path)
+          .through(fs2.text.utf8.decode)
+          .through(fs2.text.lines)
+          .compile
+          .toList
+        _ <- fiber.cancel
+      } yield lines
+    }
   }
 
-  test("process ignores Left and does not create out.txt") { dir =>
+  test("process don't write on error") {
+    outFileResource.use { path =>
+      for {
+        queue <- Queue.unbounded[IO, Deferred[IO, Either[ParseError, BigInt]]]
+        dereffed <- Deferred[IO, Either[ParseError, BigInt]]
+        fiber <- new NumberWriter[IO](path).run(queue).start
+        _ <- queue.offer(dereffed)
+        _ <- IO.sleep(200.millis)
+        _ <- dereffed.complete(Left(NegativeNumberError(-1)))
+        exists <- Files[IO].exists(path)
+        _ <- fiber.cancel
+      } yield expect(!exists)
+      }
+  }
+
+  test("process write multiply data") {
+    val smallList = List(Right(BigInt(10)), Right(BigInt(20)), Right(BigInt(30)), Right(BigInt(40)))
+    val greatList = List.fill(100)(Right(BigInt(Random.nextInt(1000000))))//большие данные потребуют больше 0.2 с
+    val smallExpected: List[String] = smallList.map(elem => elem.value.toString).appended("")
+    val greatExpected: List[String] = greatList.map(elem => elem.value.toString).appended("")
     for {
-      queue <- Queue.unbounded[IO, Deferred[IO, Either[ParseError, BigInt]]]
-      writer = new NumberWriter[IO]()
-      deferred <- Deferred[IO, Either[ParseError, BigInt]]
-      fiber <- writer.run(queue).start
-      _ <- queue.offer(deferred)
-      _ <- deferred.complete(Left(NegativeNumberError(-1)))
-      _ <- IO.sleep(200.millis)
-      exists <- IO(JFiles.exists(dir.resolve("out.txt")))
-      _ <- fiber.cancel
-    } yield expect(!exists)
+      results <- executeQueue(smallList, ExecuteType.Parallel())
+    } yield expect(smallExpected == results)
+    for {
+      results <- executeQueue(smallList, ExecuteType.Sequential())
+    }yield expect(smallExpected == results)
+    for {
+      results <- executeQueue(greatList,  ExecuteType.Parallel())
+    } yield expect(greatExpected == results)
+    for {
+      results <- executeQueue(greatList, ExecuteType.Sequential())
+    }yield expect(greatExpected == results)
   }
 }

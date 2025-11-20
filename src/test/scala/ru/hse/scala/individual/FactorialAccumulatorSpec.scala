@@ -27,27 +27,27 @@ class FactorialAccumulatorSpec extends AnyFlatSpec with Matchers {
   def findDeferred(text: String): IO[Either[ParseError, BigInt]] = {
     for {
       deferred <- Deferred[IO, Either[ParseError, BigInt]]
-      _ <- FactorialAccumulator.inputNumber(text, deferred)
-      result <- deferred.get
+      _        <- FactorialAccumulator.inputNumber(text, deferred)
+      result   <- deferred.get
     } yield result
   }
   "inputResult" should "be one for '0 '" in {
     val result = findDeferred("0 ").unsafeRunSync()
-    result shouldBe  Right(BigInt(1))
+    result shouldBe Right(BigInt(1))
   }
 
   it should "be 120 for '   5  '" in {
     val result = findDeferred("   5  ").unsafeRunSync()
-    result shouldBe  Right(BigInt(120))
+    result shouldBe Right(BigInt(120))
   }
   it should "be 3628800 for '   10  '" in {
     val result = findDeferred("   10  ").unsafeRunSync()
-    result shouldBe  Right(BigInt(120))
+    result shouldBe Right(BigInt(120))
   }
   it should "be parseError for '22222222222222', '  1 1', 'a', '-1'" in {
-    findDeferred("22222222222222").unsafeRunSync() shouldBe  Left(WrongNumberError("22222222222222"))
-    findDeferred("  1 1").unsafeRunSync() shouldBe  Left(WrongNumberError("  1 1"))
-    findDeferred("a").unsafeRunSync() shouldBe  Left(WrongNumberError("a"))
-    findDeferred("-1").unsafeRunSync() shouldBe  Left(NegativeNumberError(-1))
+    findDeferred("22222222222222").unsafeRunSync() shouldBe Left(WrongNumberError("22222222222222"))
+    findDeferred("  1 1").unsafeRunSync() shouldBe Left(WrongNumberError("  1 1"))
+    findDeferred("a").unsafeRunSync() shouldBe Left(WrongNumberError("a"))
+    findDeferred("-1").unsafeRunSync() shouldBe Left(NegativeNumberError(-1))
   }
 }
