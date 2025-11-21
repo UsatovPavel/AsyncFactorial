@@ -11,7 +11,7 @@ object Task extends IOApp {
   def taskProducer[F[_]: Concurrent: Console](
       queue: Queue[F, Deferred[F, Either[ParseError, BigInt]]],
       onExit: F[Unit] // for tests
-  ) = {
+  ): F[Unit] = {
     def loop: F[Unit] = (Console[F].println(prompt) >>
       Console[F].readLine.flatMap { text =>
         text.trim match {
@@ -36,5 +36,5 @@ object Task extends IOApp {
       _     <- taskProducer[IO](queue, fiber.cancel)
     } yield ExitCode.Success
   }
-  val DEFAULT_PATH = Path("out.txt")
+  val DEFAULT_PATH: Path = Path("out.txt")
 }

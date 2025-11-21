@@ -42,7 +42,7 @@ class FactorialAccumulatorSpec extends AnyFlatSpec with Matchers {
   }
   it should "be 3628800 for '   10  '" in {
     val result = findDeferred("   10  ").unsafeRunSync()
-    result shouldBe Right(BigInt(120))
+    result shouldBe Right(BigInt(3628800))
   }
   it should "be parseError for '22222222222222', '  1 1', 'a', '-1'" in {
     findDeferred("22222222222222").unsafeRunSync() shouldBe Left(WrongNumberError("22222222222222"))

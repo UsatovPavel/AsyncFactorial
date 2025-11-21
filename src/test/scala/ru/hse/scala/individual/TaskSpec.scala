@@ -1,11 +1,10 @@
 package ru.hse.scala.individual
 
-import cats.effect.std.Queue
 import cats.effect._
+import cats.effect.std.Queue
 import fs2.io.file.{Files, Path}
 import weaver.SimpleIOSuite
 
-import java.util.UUID
 import scala.concurrent.duration.{Duration, DurationInt}
 import scala.util.Random
 
@@ -74,18 +73,20 @@ object TaskSpec extends SimpleIOSuite {
     } yield ProducerResult(outVec, fileContents.split("\n").toList.filter(_.nonEmpty))
   }
 
-  def correctFileContentBigint(list: List[Right[Nothing, BigInt]]): List[String] = {
-    list.map(elem => FactorialAccumulator.factorial(elem.value.intValue).get.toString)
-  }
+  def correctFileContentBigint(list: List[Right[Nothing, BigInt]]): List[String] =
+    list.flatMap(elem => FactorialAccumulator.factorial(elem.value.intValue).map(_.toString))
+
   def expectedFileContentString(input: List[String]): List[String] =
-    input.map(s => s.toIntOption).filter(s => s.isDefined).map(s => FactorialAccumulator.factorial(s.get).get.toString)
+    input.flatMap(s => s.toIntOption)
+      .flatMap(n => FactorialAccumulator.factorial(n))
+      .map(_.toString)
   def fromNumberWriterInput(list: List[Right[Nothing, BigInt]]): IO[ProducerResult] = {
-    val input         = list.map(elem => elem.value.toString()).appended(Task.exitCommand)
+    val input         = list.map(elem => elem.value.toString()) ++ List(Task.exitCommand)
     val outputConsole = list.map(_ => Task.prompt)
-    val tmp           = Path(System.getProperty("java.io.tmpdir")).resolve(s"out-${UUID.randomUUID()}.txt")
     for {
-      results <- runTaskProducerWithFile(input, outputConsole, tmp)
-      _       <- Files[IO].deleteIfExists(tmp)
+      tmpPath <- Files[IO].createTempFile(None, "mixed-", ".txt", None)
+      results <- runTaskProducerWithFile(input, outputConsole, tmpPath)
+      _       <- Files[IO].deleteIfExists(tmpPath)
     } yield results
   }
 
@@ -104,13 +105,12 @@ object TaskSpec extends SimpleIOSuite {
     } yield expect(results.file == expected)
   }
   test("taskProducer mixed output") {
-    val tmp           = Path(System.getProperty("java.io.tmpdir")).resolve(s"mixed-${UUID.randomUUID()}.txt")
     val input         = mixedInput :+ Task.exitCommand
     val outputConsole = mixedInput.map(_ => Task.prompt)
-
     for {
-      results <- runTaskProducerWithFile(input, outputConsole, tmp)
-      _       <- Files[IO].deleteIfExists(tmp)
+      tmpPath <- Files[IO].createTempFile(None, "mixed-", ".txt", None)
+      results <- runTaskProducerWithFile(input, outputConsole, tmpPath)
+      _       <- Files[IO].deleteIfExists(tmpPath)
       expected = expectedFileContentString(mixedInput)
     } yield expect(results.file == expected)
   }

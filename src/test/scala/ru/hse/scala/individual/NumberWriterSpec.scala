@@ -89,8 +89,10 @@ object NumberWriterSpec extends SimpleIOSuite {
   }
 
   test("process write multiply data") {
-    val smallExpected: List[String] = smallList.map(elem => elem.value.toString).appended("")
-    val greatExpected: List[String] = greatListBigValues.map(elem => elem.value.toString).appended("")
+    val smallExpected: List[String] =
+      smallList.map(_.value.toString) ++ List("")
+    val greatExpected: List[String] =
+      greatListBigValues.map(_.value.toString) ++ List("")
     for {
       results <- executeQueue(smallList, ExecuteType.Parallel())
     } yield expect(smallExpected == results)
