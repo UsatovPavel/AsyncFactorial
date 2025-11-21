@@ -8,11 +8,11 @@ import fs2.io.file.{Files, Flags, Path}
 
 import java.nio.charset.StandardCharsets
 
-class NumberWriter[F[_]: Concurrent: Files](val outputFilepath: Path = Path("out.txt")) {
+class NumberWriter[F[_]: Concurrent: Files](val outputFilepath: Path) {
   private def process(deferred: Deferred[F, Either[ParseError, BigInt]]): F[Unit] = {
     deferred.get.flatMap {
       case Left(_)               => Concurrent[F].unit
-      case Right(number: BigInt) => {
+      case Right(number: BigInt) => {//если вызывается writeAll то ок
         Stream
           .emits(s"$number\n".getBytes(StandardCharsets.UTF_8))
           .covary[F]

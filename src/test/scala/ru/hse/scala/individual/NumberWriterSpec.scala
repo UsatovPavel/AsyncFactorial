@@ -12,9 +12,10 @@ import scala.concurrent.duration.DurationInt
 import scala.util.Random
 
 object NumberWriterSpec extends SimpleIOSuite {
-  val defaultPath: Path = new NumberWriter[IO]().outputFilepath
+  val defaultPath: Path = Task.DEFAULT_PATH
   val smallList: List[Right[Nothing, BigInt]] = List(Right(BigInt(10)), Right(BigInt(20)), Right(BigInt(30)), Right(BigInt(40)))
-  val greatList: List[Right[Nothing, BigInt]] = List.fill(100)(Right(BigInt(Random.nextInt(1000000))))//большие данные потребуют больше 0.2 с
+  val greatListSmallValues: List[Right[Nothing, BigInt]] = List.fill(100)(Right(BigInt(Random.nextInt(30))))
+  val greatListBigValues: List[Right[Nothing, BigInt]] = List.fill(100)(Right(BigInt(Random.nextInt(1000000))))//большие данные потребуют больше 0.2 с
   def outFileResource: Resource[IO, Path] =
     Resource.make {
       val tmp = Path(s"out-${UUID.randomUUID()}.txt")
@@ -87,7 +88,7 @@ object NumberWriterSpec extends SimpleIOSuite {
 
   test("process write multiply data") {
     val smallExpected: List[String] = smallList.map(elem => elem.value.toString).appended("")
-    val greatExpected: List[String] = greatList.map(elem => elem.value.toString).appended("")
+    val greatExpected: List[String] = greatListBigValues.map(elem => elem.value.toString).appended("")
     for {
       results <- executeQueue(smallList, ExecuteType.Parallel())
     } yield expect(smallExpected == results)
@@ -95,10 +96,10 @@ object NumberWriterSpec extends SimpleIOSuite {
       results <- executeQueue(smallList, ExecuteType.Sequential())
     }yield expect(smallExpected == results)
     for {
-      results <- executeQueue(greatList,  ExecuteType.Parallel())
+      results <- executeQueue(greatListBigValues,  ExecuteType.Parallel())
     } yield expect(greatExpected == results)
     for {
-      results <- executeQueue(greatList, ExecuteType.Sequential())
+      results <- executeQueue(greatListBigValues, ExecuteType.Sequential())
     }yield expect(greatExpected == results)
   }
 }

@@ -1,14 +1,23 @@
 package ru.hse.scala.individual
 
 import cats.effect.std.Queue
-import cats.effect.{Deferred, IO, Ref}
+import cats.effect._
 import fs2.io.file.{Files, Path}
 import weaver.SimpleIOSuite
 
 import java.util.UUID
+import scala.concurrent.duration.{Duration, DurationInt}
+import scala.util.Random
 
 object TaskSpec extends SimpleIOSuite {
-
+  val mixedInput: List[String] = {
+    val numbers = List.fill(50)(Random.nextInt(20).toString)
+    val incorrect = List.fill(50)("not-a-number")
+    Random.shuffle(numbers ++ incorrect)
+  }
+  def delayFiberCancel(time: Duration, writerFiber: FiberIO[Unit]): IO[Unit] = {
+    Temporal[IO].sleep(time) >> writerFiber.cancel
+  }
   test("taskProducer prints Exit on exit input") {
     val program = for {
       inputs  <- Ref.of[IO, List[String]](List("exit"))
@@ -17,7 +26,7 @@ object TaskSpec extends SimpleIOSuite {
       queue   <- Queue.unbounded[IO, Deferred[IO, Either[ParseError, BigInt]]]
       writer = new NumberWriter[IO](Path("out.txt"))
       writerFiber <- writer.run(queue).start
-      _ <- Task.taskProducer[IO](writerFiber, queue)(IO.asyncForIO, console)
+      _ <- Task.taskProducer[IO](queue, delayFiberCancel(200.millis, writerFiber))(IO.asyncForIO, console)
       outVec <- outputs.get
       outcome <- writerFiber.join
       //иначе не запишет всё до вызова get
@@ -38,41 +47,71 @@ object TaskSpec extends SimpleIOSuite {
   def runTaskProducerWithFile(
                                inputsList: List[String],
                                initialOutput: List[String],
-                               outputFile: Path = Path("out.txt")
-                             ): IO[(List[String], List[String])] = {
-
+                               outputFile: Path
+                             ): IO[ProducerResult] = {
     for {
       inputsRef  <- Ref.of[IO, List[String]](inputsList)
       outputsRef <- Ref.of[IO, List[String]](initialOutput)
       console     = new TestConsole[IO](inputsRef, outputsRef)
       queue      <- Queue.unbounded[IO, Deferred[IO, Either[ParseError, BigInt]]]
+      _ <- outputFile.parent match {
+        case Some(parent) => Files[IO].createDirectories(parent)
+        case None => IO.unit
+      }
       writer     = new NumberWriter[IO](outputFile)
       writerFiber <- writer.run(queue).start
-
-      _ <- Task.taskProducer[IO](writerFiber, queue)(IO.asyncForIO, console)
+      _ <- Task.taskProducer[IO](queue, delayFiberCancel(1000.millis, writerFiber))(IO.asyncForIO, console)
+      //у нас есть NumberWriter который нельзя join, поэтому Sleep делаем
+      _ <- writerFiber.join
       outVec <- outputsRef.get
+      exists <- Files[IO].exists(outputFile)
+      fileContents <- if (exists)
+        Files[IO].readAll(outputFile)
+          .through(fs2.text.utf8.decode)
+          .compile
+          .string
+      else IO.pure("")
+    } yield  ProducerResult(outVec, fileContents.split("\n").toList.filter(_.nonEmpty))
+  }
 
-      fileContents <- Files[IO].readAll(outputFile)
-        .through(fs2.text.utf8.decode)
-        .compile
-        .string
-    } yield (outVec, fileContents.split("\n").toList)
+  def correctFileContentBigint(list: List[Right[Nothing, BigInt]]): List[String]  = {
+    list.map(elem=>FactorialAccumulator.factorial(elem.value.intValue).get.toString)
   }
-  def correctOutput(list: List[Right[Nothing, BigInt]]): List[String]  = {
-    list.map(elem=>FactorialAccumulator.factorial(elem.value.intValue).toString)
-  }
-  def fromNumberWriterInput(list: List[Right[Nothing, BigInt]]): IO[(List[String], List[String])] = {
-    val input = list.map(elem=>elem.value.toString()).appended(Task.exitCommand)
+  def expectedFileContentString(input: List[String]): List[String] =
+    input.map(s=> s.toIntOption).filter(s=> s.isDefined).map(s=>FactorialAccumulator.factorial(s.get).get.toString)
+  def fromNumberWriterInput(list: List[Right[Nothing, BigInt]]):  IO[ProducerResult] = {
+    val input = list.map(elem => elem.value.toString()).appended(Task.exitCommand)
     val outputConsole = list.map(_ => Task.prompt)
-    val tmp = Path(s"out-${UUID.randomUUID()}.txt")
-    for {results <- runTaskProducerWithFile(input, outputConsole, tmp)
-         _ <- Files[IO].deleteIfExists(tmp)//возможно удаление раньше чтения
-         } yield(results)
+    val tmp = Path(System.getProperty("java.io.tmpdir")).resolve(s"out-${UUID.randomUUID()}.txt")
+    for {
+      results <- runTaskProducerWithFile(input, outputConsole, tmp)
+      _ <- Files[IO].deleteIfExists(tmp)
+    } yield  results
   }
+
+  final case class ProducerResult(
+                                   console: List[String],
+                                   file:    List[String]
+                                 )
   test("taskProducer multiply output"){
     for {
       results <- fromNumberWriterInput(NumberWriterSpec.smallList)
+      expected = correctFileContentBigint(NumberWriterSpec.smallList)
+    } yield expect(results.file==expected)
+    for {
+      results <- fromNumberWriterInput(NumberWriterSpec.greatListSmallValues)
+      expected = correctFileContentBigint(NumberWriterSpec.greatListSmallValues)
+    } yield expect(results.file==expected)
+  }
+  test("taskProducer mixed output") {
+    val tmp = Path(System.getProperty("java.io.tmpdir")).resolve(s"mixed-${UUID.randomUUID()}.txt")
+    val input = mixedInput :+ Task.exitCommand
+    val outputConsole = mixedInput.map(_ => Task.prompt)
 
-    } yield expect(results._1==correctOutput(NumberWriterSpec.smallList))
+    for {
+      results <- runTaskProducerWithFile(input, outputConsole, tmp)
+      _ <- Files[IO].deleteIfExists(tmp)
+      expected = expectedFileContentString(mixedInput)
+    } yield expect(results.file == expected)
   }
 }
