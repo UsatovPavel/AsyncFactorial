@@ -12,10 +12,12 @@ import scala.concurrent.duration.DurationInt
 import scala.util.Random
 
 object NumberWriterSpec extends SimpleIOSuite {
-  val defaultPath: Path = Task.DEFAULT_PATH
-  val smallList: List[Right[Nothing, BigInt]] = List(Right(BigInt(10)), Right(BigInt(20)), Right(BigInt(30)), Right(BigInt(40)))
+  val defaultPath: Path                       = Task.DEFAULT_PATH
+  val smallList: List[Right[Nothing, BigInt]] =
+    List(Right(BigInt(10)), Right(BigInt(20)), Right(BigInt(30)), Right(BigInt(40)))
   val greatListSmallValues: List[Right[Nothing, BigInt]] = List.fill(100)(Right(BigInt(Random.nextInt(30))))
-  val greatListBigValues: List[Right[Nothing, BigInt]] = List.fill(100)(Right(BigInt(Random.nextInt(1000000))))//большие данные потребуют больше 0.2 с
+  val greatListBigValues: List[Right[Nothing, BigInt]]   =
+    List.fill(100)(Right(BigInt(Random.nextInt(1000000)))) // большие данные потребуют больше 0.2 с
   def outFileResource: Resource[IO, Path] =
     Resource.make {
       val tmp = Path(s"out-${UUID.randomUUID()}.txt")
@@ -25,13 +27,13 @@ object NumberWriterSpec extends SimpleIOSuite {
     }
 
   sealed trait ExecuteType {}
-  object ExecuteType {
+  object ExecuteType       {
     case class Sequential() extends ExecuteType
-    case class Parallel() extends ExecuteType
+    case class Parallel()   extends ExecuteType
   }
 
   def executeQueue(resultsList: List[Either[ParseError, BigInt]], executeType: ExecuteType): IO[List[String]] = {
-    def foldSequential(queue:  Queue[IO, Deferred[IO, Either[ParseError, BigInt]]]): IO[Unit] = {
+    def foldSequential(queue: Queue[IO, Deferred[IO, Either[ParseError, BigInt]]]): IO[Unit] = {
       resultsList.traverse_ { r =>
         for {
           d <- Deferred[IO, Either[ParseError, BigInt]]
@@ -42,12 +44,12 @@ object NumberWriterSpec extends SimpleIOSuite {
         } yield ()
       }
     }
-    def foldParallel(queue:  Queue[IO, Deferred[IO, Either[ParseError, BigInt]]]): IO[Unit] = {
+    def foldParallel(queue: Queue[IO, Deferred[IO, Either[ParseError, BigInt]]]): IO[Unit] = {
       for {
         deferreds <- resultsList.traverse(_ => Deferred[IO, Either[ParseError, BigInt]])
-        _ <- deferreds.traverse(d => queue.offer(d))
-        _ <- deferreds.zip(resultsList).traverse{ case (d, r) => d.complete(r) }
-        _ <- deferreds.traverse(_.get)
+        _         <- deferreds.traverse(d => queue.offer(d))
+        _         <- deferreds.zip(resultsList).traverse { case (d, r) => d.complete(r) }
+        _         <- deferreds.traverse(_.get)
       } yield ()
     }
     outFileResource.use { path =>
@@ -58,8 +60,8 @@ object NumberWriterSpec extends SimpleIOSuite {
           case ExecuteType.Sequential() => foldSequential(queue)
           case ExecuteType.Parallel()   => foldParallel(queue)
         }
-        _ <- effect
-        _ <- IO.sleep(200.millis)
+        _     <- effect
+        _     <- IO.sleep(200.millis)
         lines <- Files[IO]
           .readAll(path)
           .through(fs2.text.utf8.decode)
@@ -74,16 +76,16 @@ object NumberWriterSpec extends SimpleIOSuite {
   test("process don't write on error") {
     outFileResource.use { path =>
       for {
-        queue <- Queue.unbounded[IO, Deferred[IO, Either[ParseError, BigInt]]]
+        queue    <- Queue.unbounded[IO, Deferred[IO, Either[ParseError, BigInt]]]
         dereffed <- Deferred[IO, Either[ParseError, BigInt]]
-        fiber <- new NumberWriter[IO](path).run(queue).start
-        _ <- queue.offer(dereffed)
-        _ <- IO.sleep(200.millis)
-        _ <- dereffed.complete(Left(NegativeNumberError(-1)))
-        exists <- Files[IO].exists(path)
-        _ <- fiber.cancel
+        fiber    <- new NumberWriter[IO](path).run(queue).start
+        _        <- queue.offer(dereffed)
+        _        <- IO.sleep(200.millis)
+        _        <- dereffed.complete(Left(NegativeNumberError(-1)))
+        exists   <- Files[IO].exists(path)
+        _        <- fiber.cancel
       } yield expect(!exists)
-      }
+    }
   }
 
   test("process write multiply data") {
@@ -94,12 +96,12 @@ object NumberWriterSpec extends SimpleIOSuite {
     } yield expect(smallExpected == results)
     for {
       results <- executeQueue(smallList, ExecuteType.Sequential())
-    }yield expect(smallExpected == results)
+    } yield expect(smallExpected == results)
     for {
-      results <- executeQueue(greatListBigValues,  ExecuteType.Parallel())
+      results <- executeQueue(greatListBigValues, ExecuteType.Parallel())
     } yield expect(greatExpected == results)
     for {
       results <- executeQueue(greatListBigValues, ExecuteType.Sequential())
-    }yield expect(greatExpected == results)
+    } yield expect(greatExpected == results)
   }
 }

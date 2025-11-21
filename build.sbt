@@ -14,10 +14,10 @@ lazy val root: Project = (project in file("."))
     name := "individual-task",
     libraryDependencies ++= List(
       Dependencies.catsEffect,
-      Dependencies.scalaTest  % Test,
+      Dependencies.scalaTest % Test,
       Dependencies.fs2Core,
       Dependencies.fs2Io,
-      Dependencies.weaverCats % Test,
+      Dependencies.weaverCats       % Test,
       Dependencies.weaverScalaCheck % Test
     ),
     tpolecatExcludeOptions += ScalacOptions.warnNonUnitStatement,

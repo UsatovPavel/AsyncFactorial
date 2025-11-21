@@ -7,9 +7,9 @@ import cats.effect.std.Console
 import java.nio.charset.Charset
 
 class TestConsole[F[_]](
-                               inputRef: Ref[F, List[String]],
-                               outputRef: Ref[F, List[String]]
-                             ) extends Console[F] {
+    inputRef: Ref[F, List[String]],
+    outputRef: Ref[F, List[String]]
+) extends Console[F] {
 
   override def readLine: F[String] =
     inputRef.modify {

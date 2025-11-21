@@ -4,19 +4,18 @@ import cats.effect.std.{Console, Queue}
 import cats.effect._
 import cats.implicits.{catsSyntaxFlatMapOps, toFlatMapOps, toFunctorOps}
 import fs2.io.file.Path
-//import cats.syntax.all._ // import for syntax
 
 object Task extends IOApp {
-  val prompt = "Enter factorial:"
+  val prompt      = "Enter factorial:"
   val exitCommand = "exit"
   def taskProducer[F[_]: Concurrent: Console](
       queue: Queue[F, Deferred[F, Either[ParseError, BigInt]]],
-      onExit: F[Unit]//for tests
+      onExit: F[Unit] // for tests
   ) = {
     def loop: F[Unit] = (Console[F].println(prompt) >>
       Console[F].readLine.flatMap { text =>
         text.trim match {
-          case t if (t==exitCommand) => {
+          case t if (t == exitCommand) => {
             Console[F].println("Exit") >> onExit
           }
           case _ =>
@@ -31,12 +30,11 @@ object Task extends IOApp {
     loop
   }
   override def run(args: List[String]): IO[ExitCode] = {
-    // Queue[IO, Deferred[IO, Either[ParseError, BigInt]]]
     for {
       queue <- Queue.unbounded[IO, Deferred[IO, Either[ParseError, BigInt]]]
       fiber <- new NumberWriter[IO](DEFAULT_PATH).run(queue).start
       _     <- taskProducer[IO](queue, fiber.cancel)
     } yield ExitCode.Success
   }
-  val DEFAULT_PATH=Path("out.txt")
+  val DEFAULT_PATH = Path("out.txt")
 }
