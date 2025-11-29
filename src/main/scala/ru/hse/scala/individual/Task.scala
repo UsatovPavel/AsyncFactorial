@@ -30,11 +30,13 @@ object Task extends IOApp {
       _        <- activeRef.update(_ + fib)
       _        <- fib.join.attempt.flatMap(_ => activeRef.update(_ - fib)).start
     } yield ()
+    // свой trait вместо Either[U...
+    // при ctrl cancel обработать завершение создавать через Supervisor
     def handleExit(
         queue: Queue[F, Either[Unit, Deferred[F, Either[ParseError, BigInt]]]]
     ): F[Unit] = for {
       set <- activeRef.get
-      _   <- if (waitForAll) set.toList.traverse_(_.join) else set.toList.traverse_(_.cancel)
+      _   <- if (waitForAll) set.toList.traverse_(_.join) else set.toList.traverse_(_.cancel) // убрать -> Supervisor
       _   <- queue.offer(Left(()))
       _   <- Console[F].println("Exit")
     } yield ()

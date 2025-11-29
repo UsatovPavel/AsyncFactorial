@@ -5,7 +5,7 @@ import cats.effect.{Deferred, IO, Resource}
 import cats.implicits.{toFoldableOps, toTraverseOps}
 import fs2.io.file.{Files, Path}
 import ru.hse.scala.individual.ParseError.NegativeNumberError
-import weaver.SimpleIOSuite
+import weaver.SimpleIOSuite //1 фреймворк
 
 import java.util.UUID
 import scala.concurrent.duration.DurationInt
@@ -87,7 +87,7 @@ object NumberWriterSpec extends SimpleIOSuite {
       } yield expect(!exists)
     }
   }
-
+  // запустится только последний потому что IO unsafesync
   test("process write multiply data") {
     val smallExpected: List[String] =
       smallList.map(_.value.toString) ++ List("")
