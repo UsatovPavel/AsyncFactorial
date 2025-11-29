@@ -9,21 +9,25 @@ import fs2.io.file.{Files, Flags, Path}
 import java.nio.charset.StandardCharsets
 
 class NumberWriter[F[_]: Concurrent: Files](val outputFilepath: Path) {
-  private def process(deferred: Deferred[F, Either[ParseError, BigInt]]): F[Unit] = {
-    deferred.get.flatMap {
-      case Left(_)               => Concurrent[F].unit
-      case Right(number: BigInt) => { // если вызывается writeAll то ок
-        Stream
-          .emits(s"$number\n".getBytes(StandardCharsets.UTF_8))
-          .covary[F]
-          .through(Files[F].writeAll(outputFilepath, Flags.Append))
-          .compile
-          .drain
-      }
+  private def process(item: Either[Unit, Deferred[F, Either[ParseError, BigInt]]]): F[Unit] =
+    item match {
+      case Left(_)         => Concurrent[F].unit
+      case Right(deferred) =>
+        deferred.get.flatMap {
+          case Left(_)       => Concurrent[F].unit
+          case Right(number) =>
+            Stream
+              .emits(s"$number\n".getBytes(StandardCharsets.UTF_8))
+              .covary[F]
+              .through(Files[F].writeAll(outputFilepath, Flags.Append))
+              .compile
+              .drain
+        }
     }
-  }
 
-  def run(queue: Queue[F, Deferred[F, Either[ParseError, BigInt]]]): F[Unit] = {
-    queue.take.flatMap(process).foreverM
-  }
+  def run(queue: Queue[F, Either[Unit, Deferred[F, Either[ParseError, BigInt]]]]): F[Unit] =
+    queue.take.flatMap {
+      case Left(_)         => Concurrent[F].unit
+      case Right(deferred) => process(Right(deferred)) >> run(queue)
+    }
 }

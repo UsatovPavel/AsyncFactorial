@@ -5,7 +5,7 @@ import cats.effect.std.Queue
 import fs2.io.file.{Files, Path}
 import weaver.SimpleIOSuite
 
-import scala.concurrent.duration.{Duration, DurationInt}
+import scala.concurrent.duration.Duration
 import scala.util.Random
 
 object TaskSpec extends SimpleIOSuite {
@@ -22,24 +22,28 @@ object TaskSpec extends SimpleIOSuite {
       inputs  <- Ref.of[IO, List[String]](List("exit"))
       outputs <- Ref.of[IO, List[String]](List(Task.prompt))
       console = new TestConsole[IO](inputs, outputs)
-      queue <- Queue.unbounded[IO, Deferred[IO, Either[ParseError, BigInt]]]
+      queue <- Queue.unbounded[IO, Either[Unit, Deferred[IO, Either[ParseError, BigInt]]]]
       writer = new NumberWriter[IO](Path("out.txt"))
-      writerFiber <- writer.run(queue).start
-      _           <- Task.taskProducer[IO](queue, delayFiberCancel(200.millis, writerFiber))(IO.asyncForIO, console)
-      outVec      <- outputs.get
-      outcome     <- writerFiber.join
+      writerFiber   <- writer.run(queue).start
+      active        <- Ref.of[IO, Set[Fiber[IO, Throwable, Unit]]](Set.empty)
+      producerFiber <- Task.taskProducer[IO](queue, active, waitForAll = false)(
+        IO.asyncForIO,
+        console
+      ).start
+      _       <- producerFiber.join
+      outVec  <- outputs.get
+      outcome <- writerFiber.join
       // иначе не запишет всё до вызова get
     } yield (outVec, outcome)
 
     program.flatMap { case (outVec, outcome) =>
-      val printed           = outVec.mkString("|")
-      val canceledOrErrored = outcome match {
-        case cats.effect.Outcome.Canceled()   => true
-        case cats.effect.Outcome.Errored(_)   => true
-        case cats.effect.Outcome.Succeeded(_) => false
+      val printed              = outVec.mkString("|")
+      val finishedSuccessfully = outcome match {
+        case cats.effect.Outcome.Succeeded(_) => true
+        case _                                => false
       }
       IO.pure {
-        expect(printed.contains("Exit")) and expect(canceledOrErrored)
+        expect(finishedSuccessfully) and expect(printed.contains("Exit"))
       }
     }
   }
@@ -52,14 +56,18 @@ object TaskSpec extends SimpleIOSuite {
       inputsRef  <- Ref.of[IO, List[String]](inputsList)
       outputsRef <- Ref.of[IO, List[String]](initialOutput)
       console = new TestConsole[IO](inputsRef, outputsRef)
-      queue <- Queue.unbounded[IO, Deferred[IO, Either[ParseError, BigInt]]]
+      queue <- Queue.unbounded[IO, Either[Unit, Deferred[IO, Either[ParseError, BigInt]]]]
       _     <- outputFile.parent match {
         case Some(parent) => Files[IO].createDirectories(parent)
         case None         => IO.unit
       }
       writer = new NumberWriter[IO](outputFile)
       writerFiber <- writer.run(queue).start
-      _           <- Task.taskProducer[IO](queue, delayFiberCancel(1000.millis, writerFiber))(IO.asyncForIO, console)
+      active      <- Ref.of[IO, Set[Fiber[IO, Throwable, Unit]]](Set.empty)
+      _           <- Task.taskProducer[IO](queue, active, waitForAll = true)(
+        IO.asyncForIO,
+        console
+      )
       // у нас есть NumberWriter который нельзя join, поэтому Sleep делаем
       _            <- writerFiber.join
       outVec       <- outputsRef.get

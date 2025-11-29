@@ -33,28 +33,28 @@ object NumberWriterSpec extends SimpleIOSuite {
   }
 
   def executeQueue(resultsList: List[Either[ParseError, BigInt]], executeType: ExecuteType): IO[List[String]] = {
-    def foldSequential(queue: Queue[IO, Deferred[IO, Either[ParseError, BigInt]]]): IO[Unit] = {
+    def foldSequential(queue: Queue[IO, Either[Unit, Deferred[IO, Either[ParseError, BigInt]]]]): IO[Unit] = {
       resultsList.traverse_ { r =>
         for {
           d <- Deferred[IO, Either[ParseError, BigInt]]
-          _ <- queue.offer(d)
+          _ <- queue.offer(Right(d))
           _ <- IO.sleep(20.millis)
           _ <- d.complete(r)
           _ <- d.get
         } yield ()
       }
     }
-    def foldParallel(queue: Queue[IO, Deferred[IO, Either[ParseError, BigInt]]]): IO[Unit] = {
+    def foldParallel(queue: Queue[IO, Either[Unit, Deferred[IO, Either[ParseError, BigInt]]]]): IO[Unit] = {
       for {
         deferreds <- resultsList.traverse(_ => Deferred[IO, Either[ParseError, BigInt]])
-        _         <- deferreds.traverse(d => queue.offer(d))
+        _         <- deferreds.traverse(d => queue.offer(Right(d)))
         _         <- deferreds.zip(resultsList).traverse { case (d, r) => d.complete(r) }
         _         <- deferreds.traverse(_.get)
       } yield ()
     }
     outFileResource.use { path =>
       for {
-        queue <- Queue.unbounded[IO, Deferred[IO, Either[ParseError, BigInt]]]
+        queue <- Queue.unbounded[IO, Either[Unit, Deferred[IO, Either[ParseError, BigInt]]]]
         fiber <- new NumberWriter[IO](path).run(queue).start
         effect: IO[Unit] = executeType match {
           case ExecuteType.Sequential() => foldSequential(queue)
@@ -76,10 +76,10 @@ object NumberWriterSpec extends SimpleIOSuite {
   test("process don't write on error") {
     outFileResource.use { path =>
       for {
-        queue    <- Queue.unbounded[IO, Deferred[IO, Either[ParseError, BigInt]]]
+        queue    <- Queue.unbounded[IO, Either[Unit, Deferred[IO, Either[ParseError, BigInt]]]]
         dereffed <- Deferred[IO, Either[ParseError, BigInt]]
         fiber    <- new NumberWriter[IO](path).run(queue).start
-        _        <- queue.offer(dereffed)
+        _        <- queue.offer(Right(dereffed))
         _        <- IO.sleep(200.millis)
         _        <- dereffed.complete(Left(NegativeNumberError(-1)))
         exists   <- Files[IO].exists(path)
