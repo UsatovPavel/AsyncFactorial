@@ -7,8 +7,10 @@ import cats.implicits.{catsSyntaxApplicativeError, catsSyntaxFlatMapOps, toFlatM
 import fs2.io.file.Path
 
 object Task extends IOApp {
-  val prompt      = "Enter factorial:"
-  val exitCommand = "exit"
+  val prompt                   = "Enter number:"
+  val exitCommand              = "exit"
+  private val greeting: String = "Write ordinal number of a factorial to compute, exit for Exit program.\n" +
+    "Include --wait to complete all ongoing calculations before exiting."
   def taskProducer[F[_]: Concurrent: Console](
       queue: Queue[F, Either[Unit, Deferred[F, Either[ParseError, BigInt]]]],
       activeRef: Ref[F, Set[Fiber[F, Throwable, Unit]]],
@@ -39,6 +41,7 @@ object Task extends IOApp {
     loop
   }
   override def run(args: List[String]): IO[ExitCode] = {
+    println(greeting)
     val waitForAll: Boolean = args.contains("--wait")
     for {
       queue  <- Queue.unbounded[IO, Either[Unit, Deferred[IO, Either[ParseError, BigInt]]]]
