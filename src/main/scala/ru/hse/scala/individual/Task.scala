@@ -1,9 +1,6 @@
 package ru.hse.scala.individual
 
-import cats.effect.std.{Console, Queue}
 import cats.effect._
-import cats.effect.implicits.genSpawnOps
-import cats.implicits.{catsSyntaxApplicativeError, catsSyntaxFlatMapOps, toFlatMapOps, toFoldableOps, toFunctorOps}
 import fs2.io.file.Path
 
 object Task extends IOApp {
@@ -11,41 +8,22 @@ object Task extends IOApp {
   val exitCommand              = "exit"
   private val greeting: String = "Write ordinal number of a factorial to compute, exit for Exit program.\n" +
     "Include --wait to complete all ongoing calculations before exiting."
-  def taskProducer[F[_]: Concurrent: Console](
-      queue: Queue[F, ProcessMessage[F]],
-      activeRef: Ref[F, Set[Fiber[F, Throwable, Unit]]],
-      waitForAll: Boolean
-  ): F[Unit] = {
-    def loop: F[Unit] = (Console[F].println(prompt) >>
-      Console[F].readLine.flatMap { text =>
-        text.trim match {
-          case t if (t == exitCommand) => handleExit(queue)
-          case _                       => spawnWorker(text) >> loop
-        }
-      })
-    def spawnWorker(text: String): F[Unit] = for {
-      deferred <- Deferred[F, Either[ParseError, BigInt]]
-      _        <- queue.offer(ProcessMessage.DeferredMsg(deferred))
-      fib      <- Concurrent[F].start(FactorialAccumulator.inputNumber(text, deferred).void)
-      _        <- activeRef.update(_ + fib)
-      _        <- fib.join.attempt.flatMap(_ => activeRef.update(_ - fib)).start
-    } yield ()
-    def handleExit(queue: Queue[F, ProcessMessage[F]]): F[Unit] = for {
-      set <- activeRef.get
-      _   <- if (waitForAll) set.toList.traverse_(_.join) else set.toList.traverse_(_.cancel)
-      _   <- queue.offer(ProcessMessage.Shutdown[F]())
-      _   <- Console[F].println("Exit")
-    } yield ()
-    loop
-  }
   override def run(args: List[String]): IO[ExitCode] = {
+    val waitForAll = args.contains("--wait")
     println(greeting)
-    val waitForAll: Boolean = args.contains("--wait")
-    for {
-      queue  <- Queue.unbounded[IO, ProcessMessage[IO]]
-      active <- Ref.of[IO, Set[Fiber[IO, Throwable, Unit]]](Set.empty)
-      _      <- taskProducer[IO](queue, active, waitForAll)
-    } yield ExitCode.Success
+    val program: Resource[IO, Unit] = for {
+      active <- Resource.eval(Ref.of[IO, Set[Fiber[IO, Throwable, Unit]]](Set.empty))
+      queue  <- NumberWriter.runResourse[IO](DEFAULT_PATH, active)
+      _      <- TaskProducer.runResource[IO](
+        queue = queue,
+        active = active,
+        waitForAll = waitForAll
+      )
+    } yield ()
+
+    program
+      .use(_ => IO.never)
+      .as(ExitCode.Success)
   }
   val DEFAULT_PATH: Path = Path("out.txt")
 }
