@@ -12,7 +12,7 @@ object Task extends IOApp {
   private val greeting: String = "Write ordinal number of a factorial to compute, exit for Exit program.\n" +
     "Include --wait to complete all ongoing calculations before exiting."
   def taskProducer[F[_]: Concurrent: Console](
-      queue: Queue[F, Either[Unit, Deferred[F, Either[ParseError, BigInt]]]],
+      queue: Queue[F, ProcessMessage[F]],
       activeRef: Ref[F, Set[Fiber[F, Throwable, Unit]]],
       waitForAll: Boolean
   ): F[Unit] = {
@@ -25,19 +25,15 @@ object Task extends IOApp {
       })
     def spawnWorker(text: String): F[Unit] = for {
       deferred <- Deferred[F, Either[ParseError, BigInt]]
-      _        <- queue.offer(Right(deferred))
+      _        <- queue.offer(ProcessMessage.DeferredMsg(deferred))
       fib      <- Concurrent[F].start(FactorialAccumulator.inputNumber(text, deferred).void)
       _        <- activeRef.update(_ + fib)
       _        <- fib.join.attempt.flatMap(_ => activeRef.update(_ - fib)).start
     } yield ()
-    // свой trait вместо Either[U...
-    // при ctrl cancel обработать завершение создавать через Supervisor
-    def handleExit(
-        queue: Queue[F, Either[Unit, Deferred[F, Either[ParseError, BigInt]]]]
-    ): F[Unit] = for {
+    def handleExit(queue: Queue[F, ProcessMessage[F]]): F[Unit] = for {
       set <- activeRef.get
-      _   <- if (waitForAll) set.toList.traverse_(_.join) else set.toList.traverse_(_.cancel) // убрать -> Supervisor
-      _   <- queue.offer(Left(()))
+      _   <- if (waitForAll) set.toList.traverse_(_.join) else set.toList.traverse_(_.cancel)
+      _   <- queue.offer(ProcessMessage.Shutdown[F]())
       _   <- Console[F].println("Exit")
     } yield ()
     loop
@@ -46,7 +42,7 @@ object Task extends IOApp {
     println(greeting)
     val waitForAll: Boolean = args.contains("--wait")
     for {
-      queue  <- Queue.unbounded[IO, Either[Unit, Deferred[IO, Either[ParseError, BigInt]]]]
+      queue  <- Queue.unbounded[IO, ProcessMessage[IO]]
       active <- Ref.of[IO, Set[Fiber[IO, Throwable, Unit]]](Set.empty)
       _      <- taskProducer[IO](queue, active, waitForAll)
     } yield ExitCode.Success

@@ -33,30 +33,30 @@ object NumberWriterSpec extends SimpleIOSuite {
   }
 
   def executeQueue(resultsList: List[Either[ParseError, BigInt]], executeType: ExecuteType): IO[List[String]] = {
-    def foldSequential(queue: Queue[IO, Either[Unit, Deferred[IO, Either[ParseError, BigInt]]]]): IO[Unit] = {
+    def foldSequential(queue: Queue[IO, ProcessMessage[IO]]): IO[Unit] =
       resultsList.traverse_ { r =>
         for {
           d <- Deferred[IO, Either[ParseError, BigInt]]
-          _ <- queue.offer(Right(d))
+          _ <- queue.offer(ProcessMessage.DeferredMsg(d))
           _ <- IO.sleep(20.millis)
           _ <- d.complete(r)
           _ <- d.get
         } yield ()
       }
-    }
-    def foldParallel(queue: Queue[IO, Either[Unit, Deferred[IO, Either[ParseError, BigInt]]]]): IO[Unit] = {
+
+    def foldParallel(queue: Queue[IO, ProcessMessage[IO]]): IO[Unit] =
       for {
         deferreds <- resultsList.traverse(_ => Deferred[IO, Either[ParseError, BigInt]])
-        _         <- deferreds.traverse(d => queue.offer(Right(d)))
+        _         <- deferreds.traverse(d => queue.offer(ProcessMessage.DeferredMsg(d)))
         _         <- deferreds.zip(resultsList).traverse { case (d, r) => d.complete(r) }
         _         <- deferreds.traverse(_.get)
       } yield ()
-    }
+
     outFileResource.use { path =>
       for {
-        queue <- Queue.unbounded[IO, Either[Unit, Deferred[IO, Either[ParseError, BigInt]]]]
+        queue <- Queue.unbounded[IO, ProcessMessage[IO]]
         fiber <- new NumberWriter[IO](path).run(queue).start
-        effect: IO[Unit] = executeType match {
+        effect = executeType match {
           case ExecuteType.Sequential() => foldSequential(queue)
           case ExecuteType.Parallel()   => foldParallel(queue)
         }
@@ -76,14 +76,14 @@ object NumberWriterSpec extends SimpleIOSuite {
   test("process don't write on error") {
     outFileResource.use { path =>
       for {
-        queue    <- Queue.unbounded[IO, Either[Unit, Deferred[IO, Either[ParseError, BigInt]]]]
-        dereffed <- Deferred[IO, Either[ParseError, BigInt]]
-        fiber    <- new NumberWriter[IO](path).run(queue).start
-        _        <- queue.offer(Right(dereffed))
-        _        <- IO.sleep(200.millis)
-        _        <- dereffed.complete(Left(NegativeNumberError(-1)))
-        exists   <- Files[IO].exists(path)
-        _        <- fiber.cancel
+        queue  <- Queue.unbounded[IO, ProcessMessage[IO]]
+        d      <- Deferred[IO, Either[ParseError, BigInt]]
+        fiber  <- new NumberWriter[IO](path).run(queue).start
+        _      <- queue.offer(ProcessMessage.DeferredMsg(d))
+        _      <- IO.sleep(200.millis)
+        _      <- d.complete(Left(NegativeNumberError(-1)))
+        exists <- Files[IO].exists(path)
+        _      <- fiber.cancel
       } yield expect(!exists)
     }
   }
@@ -94,16 +94,14 @@ object NumberWriterSpec extends SimpleIOSuite {
     val greatExpected: List[String] =
       greatListBigValues.map(_.value.toString) ++ List("")
     for {
-      results <- executeQueue(smallList, ExecuteType.Parallel())
-    } yield expect(smallExpected == results)
-    for {
-      results <- executeQueue(smallList, ExecuteType.Sequential())
-    } yield expect(smallExpected == results)
-    for {
-      results <- executeQueue(greatListBigValues, ExecuteType.Parallel())
-    } yield expect(greatExpected == results)
-    for {
-      results <- executeQueue(greatListBigValues, ExecuteType.Sequential())
-    } yield expect(greatExpected == results)
+      results1 <- executeQueue(smallList, ExecuteType.Parallel())
+      exp1 = expect(smallExpected == results1)
+      results2 <- executeQueue(smallList, ExecuteType.Sequential())
+      exp2 = expect(smallExpected == results2)
+      results3 <- executeQueue(greatListBigValues, ExecuteType.Parallel())
+      exp3 = expect(greatExpected == results3)
+      results4 <- executeQueue(greatListBigValues, ExecuteType.Sequential())
+      exp4 = expect(greatExpected == results4)
+    } yield exp1.and(exp2).and(exp3).and(exp4)
   }
 }

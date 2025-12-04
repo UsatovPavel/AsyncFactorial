@@ -22,7 +22,7 @@ object TaskSpec extends SimpleIOSuite {
       inputs  <- Ref.of[IO, List[String]](List("exit"))
       outputs <- Ref.of[IO, List[String]](List(Task.prompt))
       console = new TestConsole[IO](inputs, outputs)
-      queue <- Queue.unbounded[IO, Either[Unit, Deferred[IO, Either[ParseError, BigInt]]]]
+      queue <- Queue.unbounded[IO, ProcessMessage[IO]]
       writer = new NumberWriter[IO](Path("out.txt"))
       writerFiber   <- writer.run(queue).start
       active        <- Ref.of[IO, Set[Fiber[IO, Throwable, Unit]]](Set.empty)
@@ -56,7 +56,7 @@ object TaskSpec extends SimpleIOSuite {
       inputsRef  <- Ref.of[IO, List[String]](inputsList)
       outputsRef <- Ref.of[IO, List[String]](initialOutput)
       console = new TestConsole[IO](inputsRef, outputsRef)
-      queue <- Queue.unbounded[IO, Either[Unit, Deferred[IO, Either[ParseError, BigInt]]]]
+      queue <- Queue.unbounded[IO, ProcessMessage[IO]]
       _     <- outputFile.parent match {
         case Some(parent) => Files[IO].createDirectories(parent)
         case None         => IO.unit
@@ -104,13 +104,14 @@ object TaskSpec extends SimpleIOSuite {
   )
   test("taskProducer multiply output") {
     for {
-      results <- fromNumberWriterInput(NumberWriterSpec.smallList)
-      expected = correctFileContentBigint(NumberWriterSpec.smallList)
-    } yield expect(results.file == expected)
-    for {
-      results <- fromNumberWriterInput(NumberWriterSpec.greatListSmallValues)
-      expected = correctFileContentBigint(NumberWriterSpec.greatListSmallValues)
-    } yield expect(results.file == expected)
+      r1 <- fromNumberWriterInput(NumberWriterSpec.smallList)
+      e1          = correctFileContentBigint(NumberWriterSpec.smallList)
+      smallExpect = expect(r1.file == e1)
+
+      r2 <- fromNumberWriterInput(NumberWriterSpec.greatListSmallValues)
+      e2          = correctFileContentBigint(NumberWriterSpec.greatListSmallValues)
+      greatExpect = expect(r2.file == e2)
+    } yield smallExpect.and(greatExpect)
   }
   test("taskProducer mixed output") {
     val input         = mixedInput :+ Task.exitCommand

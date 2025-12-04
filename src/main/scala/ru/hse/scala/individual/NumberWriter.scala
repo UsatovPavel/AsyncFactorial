@@ -10,14 +10,13 @@ import java.nio.charset.StandardCharsets
 
 class NumberWriter[F[_]: Concurrent: Files](val outputFilepath: Path) {
   // Queue на выход NumberWriter
-  private def process(item: Either[Unit, Deferred[F, Either[ParseError, BigInt]]]): F[Unit] =
+  private def process(item: ProcessMessage[F]): F[Unit] =
     item match {
-      case Left(_)         => Concurrent[F].unit // Applicative
-      case Right(deferred) =>
+      case ProcessMessage.Shutdown()            => Concurrent[F].unit
+      case ProcessMessage.DeferredMsg(deferred) =>
         deferred.get.flatMap {
           case Left(_)       => Concurrent[F].unit
           case Right(number) =>
-            // 1 stream на Queue
             Stream
               .emits(s"$number\n".getBytes(StandardCharsets.UTF_8))
               .covary[F]
@@ -27,9 +26,9 @@ class NumberWriter[F[_]: Concurrent: Files](val outputFilepath: Path) {
         }
     }
 
-  def run(queue: Queue[F, Either[Unit, Deferred[F, Either[ParseError, BigInt]]]]): F[Unit] =
+  def run(queue: Queue[F, ProcessMessage[F]]): F[Unit] =
     queue.take.flatMap {
-      case Left(_)         => Concurrent[F].unit
-      case Right(deferred) => process(Right(deferred)) >> run(queue)
+      case ProcessMessage.Shutdown()            => Concurrent[F].unit
+      case ProcessMessage.DeferredMsg(deferred) => process(ProcessMessage.DeferredMsg(deferred)) >> run(queue)
     }
 }
