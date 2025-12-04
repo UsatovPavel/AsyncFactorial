@@ -1,7 +1,7 @@
 package ru.hse.scala.individual
 
+import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import cats.effect.{Deferred, IO}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import ru.hse.scala.individual.FactorialAccumulator.factorial
@@ -24,30 +24,36 @@ class FactorialAccumulatorSpec extends AnyFlatSpec with Matchers {
   it should "be 3628800 for 10" in {
     factorial(10) shouldBe Some(BigInt(3628800))
   }
-  def findDeferred(text: String): IO[Either[ParseError, BigInt]] = {
+  def parseFactorialMessage(text: String): IO[Either[ParseError, FactorialResult]] = {
     for {
-      deferred <- Deferred[IO, Either[ParseError, BigInt]]
-      _        <- FactorialAccumulator.inputNumber(text, deferred)
-      result   <- deferred.get
-    } yield result
+      queue   <- cats.effect.std.Queue.unbounded[IO, ProcessMessage]
+      _       <- FactorialAccumulator.inputNumber(text, queue)
+      message <- queue.take
+    } yield message match {
+      case ProcessMessage.ParseFailed(err)  => Left(err)
+      case ProcessMessage.Completed(result) => Right(result)
+      case ProcessMessage.Shutdown          => throw new RuntimeException("shutdown in factorial test")
+    }
   }
   "inputResult" should "be one for '0 '" in {
-    val result = findDeferred("0 ").unsafeRunSync()
-    result shouldBe Right(BigInt(1))
+    val result = parseFactorialMessage("0 ").unsafeRunSync()
+    result shouldBe Right(FactorialResult(0, BigInt(1)))
   }
 
   it should "be 120 for '   5  '" in {
-    val result = findDeferred("   5  ").unsafeRunSync()
-    result shouldBe Right(BigInt(120))
+    val result = parseFactorialMessage("   5  ").unsafeRunSync()
+    result shouldBe Right(FactorialResult(5, BigInt(120)))
   }
+
   it should "be 3628800 for '   10  '" in {
-    val result = findDeferred("   10  ").unsafeRunSync()
-    result shouldBe Right(BigInt(3628800))
+    val result = parseFactorialMessage("   10  ").unsafeRunSync()
+    result shouldBe Right(FactorialResult(10, BigInt(3628800)))
   }
+
   it should "be parseError for '22222222222222', '  1 1', 'a', '-1'" in {
-    findDeferred("22222222222222").unsafeRunSync() shouldBe Left(WrongNumberError("22222222222222"))
-    findDeferred("  1 1").unsafeRunSync() shouldBe Left(WrongNumberError("  1 1"))
-    findDeferred("a").unsafeRunSync() shouldBe Left(WrongNumberError("a"))
-    findDeferred("-1").unsafeRunSync() shouldBe Left(NegativeNumberError(-1))
+    parseFactorialMessage("22222222222222").unsafeRunSync() shouldBe Left(WrongNumberError("22222222222222"))
+    parseFactorialMessage("  1 1").unsafeRunSync() shouldBe Left(WrongNumberError("  1 1"))
+    parseFactorialMessage("a").unsafeRunSync() shouldBe Left(WrongNumberError("a"))
+    parseFactorialMessage("-1").unsafeRunSync() shouldBe Left(NegativeNumberError("-1"))
   }
 }

@@ -1,59 +1,51 @@
 package ru.hse.scala.individual
 
 import cats.effect._
-import cats.effect.implicits.genSpawnOps
-import cats.effect.std.{Console, Queue}
+import cats.effect.std.{Console, Queue, Supervisor}
 import cats.implicits._
-
-final class TaskProducer[F[_]: Concurrent: Console](
-    queue: Queue[F, ProcessMessage[F]],
-    activeRef: Ref[F, Set[Fiber[F, Throwable, Unit]]],
+//можно представить как loop в Task, но вынесен в класс для расширяемости архитектуры
+final class TaskProducer[F[_]: Async: Console](
+    queue: Queue[F, ProcessMessage],
+    supervisor: Supervisor[F],
+    waitGroup: WaitGroup[F],
     waitForAll: Boolean
 ) {
 
-  private val prompt      = Task.prompt
-  private val exitCommand = Task.exitCommand
+  private val prompt = "Enter number:"
+  private val exit   = "exit"
 
   def run: F[Unit] = loop
 
   private def loop: F[Unit] =
     Console[F].println(prompt) *>
       Console[F].readLine.flatMap { text =>
-        text.trim match {
-          case t if t == exitCommand =>
-            handleExit
-          case other =>
-            spawnWorker(other) >> loop
-        }
+        if (text.trim == exit) handleExit
+        else spawnTask(text) *> loop
       }
 
-  private def spawnWorker(text: String): F[Unit] =
+  private def spawnTask(text: String): F[Unit] =
     for {
-      deferred <- Deferred[F, Either[ParseError, BigInt]]
-      _        <- queue.offer(ProcessMessage.DeferredMsg(deferred))
-      fib      <- Concurrent[F].start(FactorialAccumulator.inputNumber(text, deferred).void)
-      _        <- activeRef.update(_ + fib)
-      _        <- fib.join.attempt.flatMap(_ => activeRef.update(_ - fib)).start
+      fiber <- supervisor.supervise(
+        FactorialAccumulator.inputNumber(text, queue)
+      )
+      _ <- waitGroup.register(fiber)
     } yield ()
 
   private def handleExit: F[Unit] =
     for {
-      set <- activeRef.get
-      _   <- if (waitForAll) set.toList.traverse_(_.join) else set.toList.traverse_(_.cancel)
-      _   <- queue.offer(ProcessMessage.Shutdown[F]())
-      _   <- Console[F].println("Exit")
+      _ <- if (waitForAll) waitGroup.await else Async[F].unit
+      _ <- Console[F].println("Exit")
     } yield ()
 }
 
 object TaskProducer {
-  def runResource[F[_]: Concurrent: Console](
-      queue: Queue[F, ProcessMessage[F]],
-      active: Ref[F, Set[Fiber[F, Throwable, Unit]]],
+  def make[F[_]: Async: Console](
+      queue: Queue[F, ProcessMessage],
+      supervisor: Supervisor[F],
+      waitGroup: WaitGroup[F],
       waitForAll: Boolean
-  ): Resource[F, Fiber[F, Throwable, Unit]] =
-    Resource.make {
-      new TaskProducer(queue, active, waitForAll).run.start
-    } { fiber =>
-      fiber.cancel
-    }
+  ): F[TaskProducer[F]] =
+    Async[F].pure(
+      new TaskProducer[F](queue, supervisor, waitGroup, waitForAll)
+    )
 }

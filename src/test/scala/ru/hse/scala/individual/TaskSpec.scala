@@ -1,7 +1,7 @@
 package ru.hse.scala.individual
 
 import cats.effect._
-import cats.effect.std.Queue
+import cats.effect.std.{Queue, Supervisor}
 import fs2.io.file.{Files, Path}
 import weaver.SimpleIOSuite
 
@@ -22,18 +22,27 @@ object TaskSpec extends SimpleIOSuite {
       inputs  <- Ref.of[IO, List[String]](List("exit"))
       outputs <- Ref.of[IO, List[String]](List(Task.prompt))
       console = new TestConsole[IO](inputs, outputs)
-      queue <- Queue.unbounded[IO, ProcessMessage[IO]]
+
+      queue <- Queue.unbounded[IO, ProcessMessage]
+
       writer = new NumberWriter[IO](Path("out.txt"))
-      writerFiber   <- writer.run(queue).start
-      active        <- Ref.of[IO, Set[Fiber[IO, Throwable, Unit]]](Set.empty)
-      producerFiber <- Task.taskProducer[IO](queue, active, waitForAll = false)(
-        IO.asyncForIO,
-        console
-      ).start
+      writerFiber <- writer.run(queue).start
+
+      supervisorResource <- Supervisor[IO].allocated
+      supervisor = supervisorResource._1
+
+      waitGroup <- WaitGroup.create[IO]
+
+      producerFiber <- new TaskProducer[IO](
+        queue,
+        supervisor,
+        waitGroup,
+        waitForAll = false
+      )(IO.asyncForIO, console).run.start
+
       _       <- producerFiber.join
       outVec  <- outputs.get
       outcome <- writerFiber.join
-      // иначе не запишет всё до вызова get
     } yield (outVec, outcome)
 
     program.flatMap { case (outVec, outcome) =>
@@ -47,6 +56,7 @@ object TaskSpec extends SimpleIOSuite {
       }
     }
   }
+
   def runTaskProducerWithFile(
       inputsList: List[String],
       initialOutput: List[String],
@@ -56,20 +66,18 @@ object TaskSpec extends SimpleIOSuite {
       inputsRef  <- Ref.of[IO, List[String]](inputsList)
       outputsRef <- Ref.of[IO, List[String]](initialOutput)
       console = new TestConsole[IO](inputsRef, outputsRef)
-      queue <- Queue.unbounded[IO, ProcessMessage[IO]]
-      _     <- outputFile.parent match {
+      supervisor <- Supervisor[IO].use(s => IO.pure(s))
+      waitGroup  <- WaitGroup.create[IO]
+      queue      <- Queue.unbounded[IO, ProcessMessage]
+      _          <- outputFile.parent match {
         case Some(parent) => Files[IO].createDirectories(parent)
         case None         => IO.unit
       }
       writer = new NumberWriter[IO](outputFile)
-      writerFiber <- writer.run(queue).start
-      active      <- Ref.of[IO, Set[Fiber[IO, Throwable, Unit]]](Set.empty)
-      _           <- Task.taskProducer[IO](queue, active, waitForAll = true)(
-        IO.asyncForIO,
-        console
-      )
-      // у нас есть NumberWriter который нельзя join, поэтому Sleep делаем
-      _            <- writerFiber.join
+      _ <- writer.run(queue).start
+
+      _ <- new TaskProducer[IO](queue, supervisor, waitForAll = true, waitGroup = waitGroup)(IO.asyncForIO, console).run
+
       outVec       <- outputsRef.get
       exists       <- Files[IO].exists(outputFile)
       fileContents <- if (exists)
