@@ -4,20 +4,13 @@ import cats.effect.std.Queue
 import cats.effect.{IO, Resource}
 import cats.implicits._
 import fs2.io.file.{Files, Path}
-import ru.hse.scala.individual.ParseError.NegativeNumberError
 import weaver.SimpleIOSuite
 
 import java.util.UUID
 import scala.concurrent.duration._
-import scala.util.Random
 
 object NumberWriterSpec extends SimpleIOSuite {
-  val defaultPath: Path                       = Task.DEFAULT_PATH
-  val smallList: List[Right[Nothing, BigInt]] =
-    List(Right(BigInt(10)), Right(BigInt(20)), Right(BigInt(30)), Right(BigInt(40)))
-  val greatListSmallValues: List[Right[Nothing, BigInt]] = List.fill(100)(Right(BigInt(Random.nextInt(30))))
-  val greatListBigValues: List[Right[Nothing, BigInt]]   =
-    List.fill(100)(Right(BigInt(Random.nextInt(1000000))))
+  val defaultPath: Path = Task.DEFAULT_PATH
 
   def outFileResource: Resource[IO, Path] =
     Resource.make {
@@ -34,7 +27,15 @@ object NumberWriterSpec extends SimpleIOSuite {
   }
 
   def executeQueue(list: List[Either[ParseError, BigInt]], mode: ExecuteType): IO[List[String]] = {
-
+    // Shutdown can destroy process with undone tasks
+    def waitUntilEmpty(q: Queue[IO, ProcessMessage]): IO[Unit] = {
+      def loop: IO[Unit] =
+        q.size.flatMap {
+          case 0 => IO.unit
+          case _ => loop
+        }
+      loop
+    }
     def foldSequential(queue: Queue[IO, ProcessMessage]): IO[Unit] =
       list.traverse_ {
         case Right(n) =>
@@ -68,7 +69,7 @@ object NumberWriterSpec extends SimpleIOSuite {
           case ExecuteType.Sequential => foldSequential(queue)
           case ExecuteType.Parallel   => foldParallel(queue)
         }
-
+        _ <- waitUntilEmpty(queue)
         _ <- queue.offer(ProcessMessage.Shutdown)
         _ <- fiber.join
 
@@ -82,16 +83,25 @@ object NumberWriterSpec extends SimpleIOSuite {
     }
   }
 
-  test("process doesn't write on error") {
+  test("process writes error line on ParseFailed and nothing after Shutdown") {
     outFileResource.use { path =>
       for {
-        q      <- Queue.unbounded[IO, ProcessMessage]
-        fiber  <- new NumberWriter[IO](path).run(q).start
-        _      <- q.offer(ProcessMessage.ParseFailed(NegativeNumberError("-1")))
-        _      <- q.offer(ProcessMessage.Shutdown)
-        _      <- fiber.join
-        exists <- Files[IO].exists(path)
-      } yield expect(!exists)
+        q     <- Queue.unbounded[IO, ProcessMessage]
+        fiber <- new NumberWriter[IO](path).run(q).start
+
+        err = ParseError.WrongNumberError("abc")
+        _ <- q.offer(ProcessMessage.ParseFailed(err))
+        _ <- q.offer(ProcessMessage.Shutdown)
+        _ <- q.offer(ProcessMessage.ParseFailed(err))
+        _ <- fiber.join
+
+        lines <- Files[IO]
+          .readAll(path)
+          .through(fs2.text.utf8.decode)
+          .through(fs2.text.lines)
+          .compile
+          .toList
+      } yield expect(lines == List(s"${err.input} ${err.errorMessage}", ""))
     }
   }
 
@@ -99,19 +109,20 @@ object NumberWriterSpec extends SimpleIOSuite {
     list.map(r => s"${r.value} = ${r.value}")
 
   test("process writes multiple data") {
-    val smallExpected = expectedStrings(smallList)
-    val greatExpected = expectedStrings(greatListBigValues)
+    val smallExpected = expectedStrings(TestUtils.smallList)
+    val greatExpected = expectedStrings(TestUtils.mediumListBigValues)
 
     for {
-      r1 <- executeQueue(smallList, ExecuteType.Parallel)
-      r2 <- executeQueue(smallList, ExecuteType.Sequential)
-      r3 <- executeQueue(greatListBigValues, ExecuteType.Parallel)
-      r4 <- executeQueue(greatListBigValues, ExecuteType.Sequential)
+      r1 <- executeQueue(TestUtils.smallList, ExecuteType.Parallel)
+      r2 <- executeQueue(TestUtils.smallList, ExecuteType.Sequential)
+      r3 <- executeQueue(TestUtils.mediumListBigValues, ExecuteType.Parallel)
+      r4 <- executeQueue(TestUtils.mediumListBigValues, ExecuteType.Sequential)
     } yield expect.all(
-      r1 == smallExpected,
-      r2 == smallExpected,
-      r3 == greatExpected,
-      r4 == greatExpected
+      TestUtils.checkNumberOutput(r1, smallExpected),
+      TestUtils.checkNumberOutput(r2, smallExpected),
+      TestUtils.checkNumberOutput(r3, greatExpected),
+      TestUtils.checkNumberOutput(r4, greatExpected)
     )
   }
+
 }

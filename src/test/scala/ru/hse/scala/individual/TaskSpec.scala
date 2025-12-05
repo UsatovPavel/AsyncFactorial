@@ -3,9 +3,9 @@ package ru.hse.scala.individual
 import cats.effect._
 import cats.effect.std.{Queue, Supervisor}
 import fs2.io.file.{Files, Path}
+import fs2.text
 import weaver.SimpleIOSuite
 
-import scala.concurrent.duration.Duration
 import scala.util.Random
 
 object TaskSpec extends SimpleIOSuite {
@@ -14,35 +14,23 @@ object TaskSpec extends SimpleIOSuite {
     val incorrect = List.fill(50)("not-a-number")
     Random.shuffle(numbers ++ incorrect)
   }
-  def delayFiberCancel(time: Duration, writerFiber: FiberIO[Unit]): IO[Unit] = {
-    Temporal[IO].sleep(time) >> writerFiber.cancel
-  }
+
   test("taskProducer prints Exit on exit input") {
     val program = for {
       inputs  <- Ref.of[IO, List[String]](List("exit"))
       outputs <- Ref.of[IO, List[String]](List(Task.prompt))
       console = new TestConsole[IO](inputs, outputs)
-
-      queue <- Queue.unbounded[IO, ProcessMessage]
-
-      writer = new NumberWriter[IO](Path("out.txt"))
-      writerFiber <- writer.run(queue).start
-
-      supervisorResource <- Supervisor[IO].allocated
-      supervisor = supervisorResource._1
-
-      waitGroup <- WaitGroup.create[IO]
-
-      producerFiber <- new TaskProducer[IO](
-        queue,
-        supervisor,
-        waitGroup,
-        waitForAll = false
-      )(IO.asyncForIO, console).run.start
-
-      _       <- producerFiber.join
-      outVec  <- outputs.get
-      outcome <- writerFiber.join
+      queue       <- Queue.unbounded[IO, ProcessMessage]
+      writerFiber <- new NumberWriter[IO](Path("out.txt")).run(queue).start
+      supervisorR <- Supervisor[IO].allocated
+      supervisor = supervisorR._1
+      releaseSup = supervisorR._2
+      producerFiber <- new TaskProducer[IO](queue, supervisor)(IO.asyncForIO, console).run.start
+      _             <- producerFiber.join
+      _             <- queue.offer(ProcessMessage.Shutdown)
+      outcome       <- writerFiber.join
+      outVec        <- outputs.get
+      _             <- releaseSup
     } yield (outVec, outcome)
 
     program.flatMap { case (outVec, outcome) =>
@@ -57,78 +45,111 @@ object TaskSpec extends SimpleIOSuite {
     }
   }
 
-  def runTaskProducerWithFile(
+  final case class ProducerResult(
+      console: List[String],
+      file: List[String]
+  )
+
+  def runTaskWithProgramResource(
       inputsList: List[String],
       initialOutput: List[String],
       outputFile: Path
-  ): IO[ProducerResult] = {
+  ): IO[ProducerResult] =
     for {
       inputsRef  <- Ref.of[IO, List[String]](inputsList)
       outputsRef <- Ref.of[IO, List[String]](initialOutput)
       console = new TestConsole[IO](inputsRef, outputsRef)
-      supervisor <- Supervisor[IO].use(s => IO.pure(s))
-      waitGroup  <- WaitGroup.create[IO]
-      queue      <- Queue.unbounded[IO, ProcessMessage]
-      _          <- outputFile.parent match {
-        case Some(parent) => Files[IO].createDirectories(parent)
-        case None         => IO.unit
-      }
-      writer = new NumberWriter[IO](outputFile)
-      _ <- writer.run(queue).start
-
-      _ <- new TaskProducer[IO](queue, supervisor, waitForAll = true, waitGroup = waitGroup)(IO.asyncForIO, console).run
-
-      outVec       <- outputsRef.get
-      exists       <- Files[IO].exists(outputFile)
-      fileContents <- if (exists)
-        Files[IO].readAll(outputFile)
-          .through(fs2.text.utf8.decode)
-          .compile
-          .string
-      else IO.pure("")
-    } yield ProducerResult(outVec, fileContents.split("\n").toList.filter(_.nonEmpty))
-  }
+      _           <- Task.programResource(waitForAll = true, outputFile, console).use(_ => IO.unit)
+      out         <- outputsRef.get
+      exists      <- Files[IO].exists(outputFile)
+      fileContent <-
+        if (exists)
+          Files[IO]
+            .readAll(outputFile)
+            .through(text.utf8.decode)
+            .compile
+            .string
+            .map(_.split("\n", -1).toList)
+        else IO.pure(List.empty)
+    } yield ProducerResult(out, fileContent)
 
   def correctFileContentBigint(list: List[Right[Nothing, BigInt]]): List[String] =
-    list.flatMap(elem => FactorialAccumulator.factorial(elem.value.intValue).map(_.toString))
+    list.flatMap(elem =>
+      FactorialAccumulator
+        .factorial(elem.value.intValue)
+        .map(v => s"${elem.value} = $v")
+    )
 
   def expectedFileContentString(input: List[String]): List[String] =
-    input.flatMap(s => s.toIntOption)
-      .flatMap(n => FactorialAccumulator.factorial(n))
-      .map(_.toString)
+    input.map {
+      case s if s.toIntOption.isDefined =>
+        val n = s.toInt
+        val v = FactorialAccumulator.factorial(n).get
+        s"$n = $v"
+      case _ =>
+        "not-a-number parse error: wrong number"
+    }
+
   def fromNumberWriterInput(list: List[Right[Nothing, BigInt]]): IO[ProducerResult] = {
     val input         = list.map(elem => elem.value.toString()) ++ List(Task.exitCommand)
     val outputConsole = list.map(_ => Task.prompt)
     for {
       tmpPath <- Files[IO].createTempFile(None, "mixed-", ".txt", None)
-      results <- runTaskProducerWithFile(input, outputConsole, tmpPath)
+      results <- runTaskWithProgramResource(input, outputConsole, tmpPath)
       _       <- Files[IO].deleteIfExists(tmpPath)
     } yield results
   }
 
-  final case class ProducerResult(
-      console: List[String],
-      file: List[String]
-  )
+  def some(): IO[(ProducerResult, List[String], ProducerResult, List[String])] =
+    for {
+      r1 <- fromNumberWriterInput(TestUtils.smallList)
+      e1 = correctFileContentBigint(TestUtils.smallList)
+      r2 <- fromNumberWriterInput(TestUtils.mediumListSmallValues)
+      e2 = correctFileContentBigint(TestUtils.mediumListSmallValues)
+    } yield (r1, e1, r2, e2)
+
+//  test("some outputs everything") {
+//    for {
+//      data <- some()
+//      _    <- IO.println("=== RESULT 1 ===")
+//      _    <- IO.println("file:\n" + data._1.file.mkString("\n"))
+//      _    <- IO.println("expected file 1:\n" + data._2.mkString("\n"))
+//      _    <- IO.println(TestUtils.diffOutput(data._1.file, data._2))
+////      _    <- IO.println("\n=== RESULT 2 ===")
+////      _    <- IO.println("file:\n" + data._3.file.mkString("\n"))
+////      _    <- IO.println("expected file 2:\n" + data._4.mkString("\n"))
+//      _ <- IO.println(TestUtils.checkNumberOutput(data._1.file, data._2))
+//    } yield expect(true)
+//  }
+
   test("taskProducer multiply output") {
     for {
-      r1 <- fromNumberWriterInput(NumberWriterSpec.smallList)
-      e1          = correctFileContentBigint(NumberWriterSpec.smallList)
-      smallExpect = expect(r1.file == e1)
-
-      r2 <- fromNumberWriterInput(NumberWriterSpec.greatListSmallValues)
-      e2          = correctFileContentBigint(NumberWriterSpec.greatListSmallValues)
-      greatExpect = expect(r2.file == e2)
+      r1 <- fromNumberWriterInput(TestUtils.smallList)
+      e1          = correctFileContentBigint(TestUtils.smallList)
+      smallExpect = expect(TestUtils.checkNumberOutput(r1.file, e1))
+//      _           = clue(s"SMALL — file ${r1.file}")
+//      _           = clue(s"SMALL — expected$e1")
+      r2 <- fromNumberWriterInput(TestUtils.mediumListSmallValues)
+      e2          = correctFileContentBigint(TestUtils.mediumListSmallValues)
+      greatExpect = expect(TestUtils.checkNumberOutput(r2.file, e2))
     } yield smallExpect.and(greatExpect)
   }
+
   test("taskProducer mixed output") {
     val input         = mixedInput :+ Task.exitCommand
     val outputConsole = mixedInput.map(_ => Task.prompt)
     for {
       tmpPath <- Files[IO].createTempFile(None, "mixed-", ".txt", None)
-      results <- runTaskProducerWithFile(input, outputConsole, tmpPath)
+      results <- runTaskWithProgramResource(input, outputConsole, tmpPath)
       _       <- Files[IO].deleteIfExists(tmpPath)
       expected = expectedFileContentString(mixedInput)
-    } yield expect(results.file == expected)
+      // _ <- IO.println(TestUtils.diffOutput(results.file, expected))
+    } yield expect(TestUtils.checkNumberOutput(results.file, expected))
+  }
+  test("taskProducer huge input") {
+    for {
+      r <- fromNumberWriterInput(TestUtils.bigListSmallValues)
+      expected = correctFileContentBigint(TestUtils.bigListSmallValues)
+    } yield expect(TestUtils.checkNumberOutput(r.file, expected))
   }
 }

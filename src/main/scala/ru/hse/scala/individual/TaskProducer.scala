@@ -6,46 +6,35 @@ import cats.implicits._
 //можно представить как loop в Task, но вынесен в класс для расширяемости архитектуры
 final class TaskProducer[F[_]: Async: Console](
     queue: Queue[F, ProcessMessage],
-    supervisor: Supervisor[F],
-    waitGroup: WaitGroup[F],
-    waitForAll: Boolean
+    workerSupervisor: Supervisor[F]
 ) {
 
-  private val prompt = "Enter number:"
-  private val exit   = "exit"
+  private val prompt  = Task.prompt
+  private val exitCmd = Task.exitCommand
 
   def run: F[Unit] = loop
 
   private def loop: F[Unit] =
     Console[F].println(prompt) *>
       Console[F].readLine.flatMap { text =>
-        if (text.trim == exit) handleExit
-        else spawnTask(text) *> loop
+        text.trim match {
+          case t if t == exitCmd =>
+            Console[F].println("Exit")
+          case other =>
+            spawnWorker(other) >> loop
+        }
       }
 
-  private def spawnTask(text: String): F[Unit] =
-    for {
-      fiber <- supervisor.supervise(
-        FactorialAccumulator.inputNumber(text, queue)
-      )
-      _ <- waitGroup.register(fiber)
-    } yield ()
-
-  private def handleExit: F[Unit] =
-    for {
-      _ <- if (waitForAll) waitGroup.await else Async[F].unit
-      _ <- Console[F].println("Exit")
-    } yield ()
+  private def spawnWorker(text: String): F[Unit] =
+    workerSupervisor.supervise(
+      FactorialAccumulator.inputNumber(text, queue)
+    ).void
 }
 
 object TaskProducer {
   def make[F[_]: Async: Console](
       queue: Queue[F, ProcessMessage],
-      supervisor: Supervisor[F],
-      waitGroup: WaitGroup[F],
-      waitForAll: Boolean
+      workerSupervisor: Supervisor[F]
   ): F[TaskProducer[F]] =
-    Async[F].pure(
-      new TaskProducer[F](queue, supervisor, waitGroup, waitForAll)
-    )
+    Async[F].pure(new TaskProducer[F](queue, workerSupervisor))
 }
