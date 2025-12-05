@@ -84,8 +84,14 @@ object TaskSpec extends SimpleIOSuite {
     input.map {
       case s if s.toIntOption.isDefined =>
         val n = s.toInt
-        val v = FactorialAccumulator.factorial(n).get
-        s"$n = $v"
+        val v = FactorialAccumulator.factorial(n)
+        v match {
+          case Some(value) => s"$n = $value"
+          case _           => {
+            val err = ParseError.CalculationError(s)
+            s"${err.input}: ${err.errorMessage}"
+          }
+        }
       case _ =>
         "not-a-number parse error: wrong number"
     }
