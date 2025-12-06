@@ -21,15 +21,8 @@ object Task extends IOApp {
       releaseB    = supBAlloc._2
       queue       <- Resource.eval(Queue.unbounded[IO, ProcessMessage])
       writerFiber <- Resource.eval(supervisorA.supervise(new NumberWriter[IO](outPath).run(queue)))
-      _           <- Resource.eval(
-        TaskProducer
-          .make[IO](queue, supervisorB)(
-            IO.asyncForIO,
-            console
-          )
-          .flatMap(_.run)
-      )
-      _ <- Resource.eval {
+      _           <- Resource.eval(new TaskProducer[IO](queue, supervisorB)(IO.asyncForIO, console).run)
+      _           <- Resource.eval {
         if (waitForAll) releaseB >> queue.offer(ProcessMessage.Shutdown)
         else queue.offer(ProcessMessage.Shutdown) >> releaseB
       }

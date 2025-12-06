@@ -1,14 +1,12 @@
 package ru.hse.scala.individual
 
 import cats.effect._
-import cats.effect.implicits.monadCancelOps_
-import cats.effect.std.{Console, Queue, Semaphore, Supervisor}
+import cats.effect.std.{Console, Queue, Supervisor}
 import cats.implicits._
 //можно представить как loop в Task, но вынесен в класс для расширяемости архитектуры
 final class TaskProducer[F[_]: Async: Console](
     queue: Queue[F, ProcessMessage],
-    workerSupervisor: Supervisor[F],
-    sem: Semaphore[F]
+    workerSupervisor: Supervisor[F]
 ) {
 
   private val prompt  = Task.prompt
@@ -28,24 +26,15 @@ final class TaskProducer[F[_]: Async: Console](
       }
 
   private def spawnWorker(text: String): F[Unit] =
-    for {
-      _ <- sem.acquire
-      _ <- workerSupervisor.supervise(
-        FactorialAccumulator
-          .inputNumber(text, queue)
-          .guarantee(sem.release)
-      )
-    } yield ()
+    workerSupervisor.supervise(
+      FactorialAccumulator.inputNumber(text, queue)
+    ).void
 }
 
 object TaskProducer {
-  val DEFAULT_MAX_PROCESS: Int = 10e5.toInt
   def make[F[_]: Async: Console](
       queue: Queue[F, ProcessMessage],
-      workerSupervisor: Supervisor[F],
-      maxParallel: Int = DEFAULT_MAX_PROCESS
+      workerSupervisor: Supervisor[F]
   ): F[TaskProducer[F]] =
-    Semaphore[F](maxParallel.toLong).map(sem =>
-      new TaskProducer[F](queue, workerSupervisor, sem)
-    )
+    Async[F].pure(new TaskProducer[F](queue, workerSupervisor))
 }

@@ -25,15 +25,12 @@ object TaskSpec extends SimpleIOSuite {
       supervisorR <- Supervisor[IO].allocated
       supervisor = supervisorR._1
       releaseSup = supervisorR._2
-      producerFiber <- TaskProducer
-        .make[IO](queue, supervisor)(IO.asyncForIO, console)
-        .flatMap(_.run)
-        .start
-      _       <- producerFiber.join
-      _       <- queue.offer(ProcessMessage.Shutdown)
-      outcome <- writerFiber.join
-      outVec  <- outputs.get
-      _       <- releaseSup
+      producerFiber <- new TaskProducer[IO](queue, supervisor)(IO.asyncForIO, console).run.start
+      _             <- producerFiber.join
+      _             <- queue.offer(ProcessMessage.Shutdown)
+      outcome       <- writerFiber.join
+      outVec        <- outputs.get
+      _             <- releaseSup
     } yield (outVec, outcome)
 
     program.flatMap { case (outVec, outcome) =>
