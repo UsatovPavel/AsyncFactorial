@@ -36,5 +36,5 @@ object TaskProducer {
       queue: Queue[F, ProcessMessage],
       workerSupervisor: Supervisor[F]
   ): F[TaskProducer[F]] =
-    Async[F].pure(new TaskProducer[F](queue, workerSupervisor))
+    Sync[F].pure(new TaskProducer[F](queue, workerSupervisor))
 }

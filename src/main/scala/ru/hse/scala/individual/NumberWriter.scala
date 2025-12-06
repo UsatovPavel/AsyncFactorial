@@ -45,6 +45,6 @@ object NumberWriter {
       } yield ()
     }
 
-    Resource.make(acquire)(release).map(x => x._1)
+    Resource.make(acquire)(release).map { case (q, _) => q }
   }
 }

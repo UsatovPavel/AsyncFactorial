@@ -13,16 +13,12 @@ object Task extends IOApp {
 
   def programResource(waitForAll: Boolean, outPath: Path, console: Console[IO]): Resource[IO, Unit] =
     for {
-      supAAlloc <- Resource.eval(Supervisor[IO](waitForAll).allocated)
-      supBAlloc <- Resource.eval(Supervisor[IO](waitForAll).allocated)
-      supervisorA = supAAlloc._1
-      releaseA    = supAAlloc._2
-      supervisorB = supBAlloc._1
-      releaseB    = supBAlloc._2
-      queue       <- Resource.eval(Queue.unbounded[IO, ProcessMessage])
-      writerFiber <- Resource.eval(supervisorA.supervise(new NumberWriter[IO](outPath).run(queue)))
-      _           <- Resource.eval(new TaskProducer[IO](queue, supervisorB)(IO.asyncForIO, console).run)
-      _           <- Resource.eval {
+      (supervisorA, releaseA) <- Resource.eval(Supervisor[IO](waitForAll).allocated)
+      (supervisorB, releaseB) <- Resource.eval(Supervisor[IO](waitForAll).allocated)
+      queue                   <- Resource.eval(Queue.unbounded[IO, ProcessMessage])
+      writerFiber             <- Resource.eval(supervisorA.supervise(new NumberWriter[IO](outPath).run(queue)))
+      _                       <- Resource.eval(new TaskProducer[IO](queue, supervisorB)(IO.asyncForIO, console).run)
+      _                       <- Resource.eval {
         if (waitForAll) releaseB >> queue.offer(ProcessMessage.Shutdown)
         else queue.offer(ProcessMessage.Shutdown) >> releaseB
       }
