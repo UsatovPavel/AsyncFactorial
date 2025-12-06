@@ -73,13 +73,6 @@ object TaskSpec extends SimpleIOSuite {
         else IO.pure(List.empty)
     } yield ProducerResult(out, fileContent)
 
-  def correctFileContentBigint(list: List[Right[Nothing, BigInt]]): List[String] =
-    list.flatMap(elem =>
-      FactorialAccumulator
-        .factorial(elem.value.intValue)
-        .map(v => s"${elem.value} = $v")
-    )
-
   def expectedFileContentString(input: List[String]): List[String] =
     input.map {
       case s if s.toIntOption.isDefined =>
@@ -96,9 +89,9 @@ object TaskSpec extends SimpleIOSuite {
         "not-a-number parse error: wrong number"
     }
 
-  def fromNumberWriterInput(list: List[Right[Nothing, BigInt]]): IO[ProducerResult] = {
-    val input         = list.map(elem => elem.value.toString()) ++ List(Task.exitCommand)
-    val outputConsole = list.map(_ => Task.prompt)
+  def fromNumberWriterInput(list: List[Either[ParseError, BigInt]]): IO[ProducerResult] = {
+    val input         = list.collect { case Right(v) => v.toString() } ++ List(Task.exitCommand)
+    val outputConsole = list.collect { case Right(_) => Task.prompt }
     for {
       tmpPath <- Files[IO].createTempFile(None, "mixed-", ".txt", None)
       results <- runTaskWithProgramResource(input, outputConsole, tmpPath)
@@ -106,37 +99,14 @@ object TaskSpec extends SimpleIOSuite {
     } yield results
   }
 
-  def some(): IO[(ProducerResult, List[String], ProducerResult, List[String])] =
-    for {
-      r1 <- fromNumberWriterInput(TestUtils.smallList)
-      e1 = correctFileContentBigint(TestUtils.smallList)
-      r2 <- fromNumberWriterInput(TestUtils.mediumListSmallValues)
-      e2 = correctFileContentBigint(TestUtils.mediumListSmallValues)
-    } yield (r1, e1, r2, e2)
-
-//  test("some outputs everything") {
-//    for {
-//      data <- some()
-//      _    <- IO.println("=== RESULT 1 ===")
-//      _    <- IO.println("file:\n" + data._1.file.mkString("\n"))
-//      _    <- IO.println("expected file 1:\n" + data._2.mkString("\n"))
-//      _    <- IO.println(TestUtils.diffOutput(data._1.file, data._2))
-////      _    <- IO.println("\n=== RESULT 2 ===")
-////      _    <- IO.println("file:\n" + data._3.file.mkString("\n"))
-////      _    <- IO.println("expected file 2:\n" + data._4.mkString("\n"))
-//      _ <- IO.println(TestUtils.checkNumberOutput(data._1.file, data._2))
-//    } yield expect(true)
-//  }
-
   test("taskProducer multiply output") {
     for {
-      r1 <- fromNumberWriterInput(TestUtils.smallList)
-      e1          = correctFileContentBigint(TestUtils.smallList)
+      r1 <- fromNumberWriterInput(TestUtils.smallInputs.toEitherBigIntList)
+      e1 <- TestUtils.smallInputs.expectedStringsIO()
       smallExpect = expect(TestUtils.checkNumberOutput(r1.file, e1))
-//      _           = clue(s"SMALL — file ${r1.file}")
-//      _           = clue(s"SMALL — expected$e1")
-      r2 <- fromNumberWriterInput(TestUtils.mediumListSmallValues)
-      e2          = correctFileContentBigint(TestUtils.mediumListSmallValues)
+
+      r2 <- fromNumberWriterInput(TestUtils.mediumInputsSmallValues.toEitherBigIntList)
+      e2 <- TestUtils.mediumInputsSmallValues.expectedStringsIO()
       greatExpect = expect(TestUtils.checkNumberOutput(r2.file, e2))
     } yield smallExpect.and(greatExpect)
   }
@@ -154,8 +124,37 @@ object TaskSpec extends SimpleIOSuite {
   }
   test("taskProducer huge input") {
     for {
-      r <- fromNumberWriterInput(TestUtils.bigListSmallValues)
-      expected = correctFileContentBigint(TestUtils.bigListSmallValues)
+      r        <- fromNumberWriterInput(TestUtils.largeInputData.toEitherBigIntList)
+      expected <- TestUtils.largeInputData.expectedStringsIO()
     } yield expect(TestUtils.checkNumberOutput(r.file, expected))
+  }
+
+  test("Сancel whole program even with huge pending input") {
+    val inputStrings = TestUtils.largeInputData.values.map(_.toString)
+
+    val program =
+      for {
+        inputsRef  <- Ref.of[IO, List[String]](inputStrings)
+        outputsRef <- Ref.of[IO, List[String]](List.fill(inputStrings.length)(Task.prompt))
+        console = new TestConsole[IO](inputsRef, outputsRef)
+
+        // запускаем как реальную программу — resource сам отменит writer
+        fiber <- Task
+          .programResource(waitForAll = false, Path("cancel-test.txt"), console)
+          .use(_ => IO.never)
+          .start
+        // без этой строки или обычного sleep могло ничего не запуститься перед cancel и тест бы отработал успешно
+        _ <- TestUtils.waitForOutputsAtLeast(outputsRef, 1)
+
+        _       <- fiber.cancel
+        outcome <- fiber.join
+      } yield outcome
+
+    program.map { outcome =>
+      expect(outcome match {
+        case cats.effect.Outcome.Canceled() => true
+        case _                              => false
+      })
+    }
   }
 }

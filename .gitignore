@@ -27,7 +27,7 @@ local.conf
 local-dir/
 .sbtopts
 repositories-ci
-
+planningDev.txt
 ### VS Code
 .vscode/
 

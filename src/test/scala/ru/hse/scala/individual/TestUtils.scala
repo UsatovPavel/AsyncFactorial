@@ -1,5 +1,8 @@
 package ru.hse.scala.individual
 
+import cats.effect.{IO, Ref}
+
+import scala.concurrent.duration.DurationInt
 import scala.util.Random
 
 object TestUtils {
@@ -11,12 +14,20 @@ object TestUtils {
   def checkWithoutLastOutput(result: List[String], expected: List[String]): Boolean =
     result.sorted == expected.sorted
 
-  val smallList: List[Right[Nothing, BigInt]] =
-    List(Right(BigInt(10)), Right(BigInt(20)), Right(BigInt(30)), Right(BigInt(40)))
-  val mediumListSmallValues: List[Right[Nothing, BigInt]] = List.fill(100)(Right(BigInt(Random.nextInt(30))))
-  val mediumListBigValues: List[Right[Nothing, BigInt]]   = List.fill(100)(Right(BigInt(Random.nextInt(1000000))))
-  val bigListSmallValues: List[Right[Nothing, BigInt]]    = List.fill(10000)(Right(BigInt(Random.nextInt(30))))
+  val smallInputs: IntInputs             = IntInputs(List(10, 20, 30, 40))
+  val mediumInputsSmallValues: IntInputs = IntInputs(List.fill(100)(Random.nextInt(30)))
+  val mediumInputsBigValues: IntInputs   = IntInputs(List.fill(100)(Random.nextInt(1000000)))
+  val largeInputData: IntInputs          = IntInputs(List.fill(10000)(Random.nextInt(30)))
+  val veryLargeInputData: IntInputs      = IntInputs(List.fill(100000)(Random.nextInt(30)))
 
+  def waitForOutputsAtLeast(ref: Ref[IO, List[String]], n: Int): IO[Unit] = {
+    def loop: IO[Unit] =
+      ref.get.flatMap { xs =>
+        if (xs.size >= n) IO.unit
+        else IO.sleep(10.millis) >> loop
+      }
+    loop
+  }
   def diffOutput(result: List[String], expected: List[String]): String = {
     val rSorted = result.sorted
     val eSorted = expected.sorted

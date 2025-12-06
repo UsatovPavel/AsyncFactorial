@@ -9,15 +9,6 @@ import java.nio.charset.StandardCharsets
 
 final class NumberWriter[F[_]: Async: Files](path: Path) {
 
-  private def format(msg: ProcessMessage): Option[String] = msg match {
-    case ProcessMessage.Completed(res) =>
-      Some(s"${res.input} = ${res.value}")
-    case ProcessMessage.ParseFailed(err) =>
-      Some(s"${err.input} ${err.errorMessage}")
-    case ProcessMessage.Shutdown =>
-      None
-  }
-
   private def writeLine(line: String): F[Unit] =
     Stream
       .emits((line + "\n").getBytes(StandardCharsets.UTF_8))
@@ -29,9 +20,9 @@ final class NumberWriter[F[_]: Async: Files](path: Path) {
   def run(queue: Queue[F, ProcessMessage]): F[Unit] = {
     def loop: F[Unit] =
       queue.take.flatMap { msg =>
-        format(msg) match {
-          case Some(line) => writeLine(line) >> loop
-          case None       => Concurrent[F].unit
+        msg.render match {
+          case Rendered.Line(line) => writeLine(line) >> loop
+          case Rendered.Stop       => Concurrent[F].unit
         }
       }
     loop
