@@ -11,7 +11,12 @@ object Task extends IOApp {
   private val greeting: String =
     "Write ordinal number of a factorial to compute, exit for Exit program.\nInclude --wait to complete all ongoing calculations before exiting."
 
-  def programResource(waitForAll: Boolean, outPath: Path, console: Console[IO]): Resource[IO, Unit] =
+  def programResource(
+      waitForAll: Boolean,
+      outPath: Path,
+      console: Console[IO],
+      maxParallel: Int = TaskProducer.DEFAULT_MAX_PROCESS
+  ): Resource[IO, Unit] =
     for {
       supAAlloc <- Resource.eval(Supervisor[IO](waitForAll).allocated)
       supBAlloc <- Resource.eval(Supervisor[IO](waitForAll).allocated)
@@ -23,7 +28,7 @@ object Task extends IOApp {
       writerFiber <- Resource.eval(supervisorA.supervise(new NumberWriter[IO](outPath).run(queue)))
       _           <- Resource.eval(
         TaskProducer
-          .make[IO](queue, supervisorB)(
+          .make[IO](queue, supervisorB, maxParallel)(
             IO.asyncForIO,
             console
           )

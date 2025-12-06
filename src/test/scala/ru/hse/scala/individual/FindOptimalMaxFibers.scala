@@ -27,7 +27,7 @@ object FindOptimalMaxFibers extends IOApp.Simple {
 
       inputsRef  <- Ref.of[IO, List[String]](inputs)
       outputsRef <- Ref.of[IO, List[String]](prompts)
-      console = new TestConsole[IO](inputsRef, outputsRef)
+      console    <- TestConsole.fromRef(inputsRef, outputsRef)
 
       queue <- Queue.unbounded[IO, ProcessMessage]
 

@@ -12,8 +12,8 @@ object TaskProducerSpec extends SimpleIOSuite {
       tmpPath    <- Files[IO].createTempFile(None, "cancel-", ".txt", None)
       inputsRef  <- Ref.of[IO, List[String]](TestUtils.largeInputData.values.map(_.toString))
       outputsRef <- Ref.of[IO, List[String]](List.empty)
-      console = new TestConsole[IO](inputsRef, outputsRef)
-      queue <- Queue.unbounded[IO, ProcessMessage]
+      console    <- TestConsole.fromRef(inputsRef, outputsRef)
+      queue      <- Queue.unbounded[IO, ProcessMessage]
 
       supR <- Supervisor[IO].allocated
       sup = supR._1
