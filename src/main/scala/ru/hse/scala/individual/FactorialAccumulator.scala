@@ -17,11 +17,12 @@ object FactorialAccumulator {
       case None =>
         out.offer(ProcessMessage.ParseFailed(WrongNumberError(line)))
       case Some(number) =>
-        if (number < 0) {
+        if (number < 0) { // guard
           out.offer(ProcessMessage.ParseFailed(NegativeNumberError(line)))
         } else {
-          val optionalFactorial = factorial(number)
-          optionalFactorial match {
+          val optionalFactorial =
+            factorial(number)       // сразу при вызове inputNumber запустится. В Fiber просто в очередь положит
+          optionalFactorial match { // match inside
             case None         => out.offer(ProcessMessage.ParseFailed(CalculationError(line)))
             case Some(result) => out.offer(ProcessMessage.Completed(FactorialResult(number, result)))
           }

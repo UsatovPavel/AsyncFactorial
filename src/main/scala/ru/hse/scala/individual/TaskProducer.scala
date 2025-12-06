@@ -32,6 +32,7 @@ final class TaskProducer[F[_]: Async: Console](
 }
 
 object TaskProducer {
+//Fiber в ресурсе new, лучше сделать приватным потому что легче менять TaskProducer
   def make[F[_]: Async: Console](
       queue: Queue[F, ProcessMessage],
       workerSupervisor: Supervisor[F]

@@ -5,7 +5,7 @@ import cats.effect.std.{Console, Queue, Supervisor}
 import fs2.io.file.Path
 
 object Task extends IOApp {
-
+//сложно читать  тесты
   val prompt                   = "Enter number:"
   val exitCommand              = "exit"
   private val greeting: String =
@@ -13,17 +13,15 @@ object Task extends IOApp {
 
   def programResource(waitForAll: Boolean, outPath: Path, console: Console[IO]): Resource[IO, Unit] =
     for {
-      (supervisorA, releaseA) <- Resource.eval(Supervisor[IO](waitForAll).allocated)
-      (supervisorB, releaseB) <- Resource.eval(Supervisor[IO](waitForAll).allocated)
-      queue                   <- Resource.eval(Queue.unbounded[IO, ProcessMessage])
-      writerFiber             <- Resource.eval(supervisorA.supervise(new NumberWriter[IO](outPath).run(queue)))
-      _                       <- Resource.eval(new TaskProducer[IO](queue, supervisorB)(IO.asyncForIO, console).run)
-      _                       <- Resource.eval {
-        if (waitForAll) releaseB >> queue.offer(ProcessMessage.Shutdown)
-        else queue.offer(ProcessMessage.Shutdown) >> releaseB
+      supervisorA <- Supervisor[IO](waitForAll)
+      supervisorB <- Supervisor[IO](waitForAll)
+      queue       <- Resource.eval(Queue.unbounded[IO, ProcessMessage])
+      _           <- Resource.eval(supervisorA.supervise(new NumberWriter[IO](outPath).run(queue)))
+      _           <- Resource.eval(new TaskProducer[IO](queue, supervisorB)(IO.asyncForIO, console).run)
+      // был упрощён функционал, тесты перестали работать
+      _ <- Resource.eval {
+        queue.offer(ProcessMessage.Shutdown)
       }
-      _ <- Resource.eval(writerFiber.join)
-      _ <- Resource.eval(releaseA)
     } yield ()
 
   override def run(args: List[String]): IO[ExitCode] = {
@@ -32,5 +30,5 @@ object Task extends IOApp {
     programResource(waitForAll, DEFAULT_PATH, implicitly[Console[IO]]).use(_ => IO.unit).as(ExitCode.Success)
   }
 
-  val DEFAULT_PATH: Path = Path("out.txt")
+  val DEFAULT_PATH: Path = Path("out.txt") // Camel Case
 }

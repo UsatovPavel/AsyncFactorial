@@ -107,6 +107,7 @@ object TaskSpec extends SimpleIOSuite {
 
       r2 <- fromNumberWriterInput(TestUtils.mediumInputsSmallValues.toEitherBigIntList)
       e2 <- TestUtils.mediumInputsSmallValues.expectedStringsIO()
+      _  <- IO(println(TestUtils.diffOutput(r2.file, e2)))
       greatExpect = expect(TestUtils.checkNumberOutput(r2.file, e2))
     } yield smallExpect.and(greatExpect)
   }

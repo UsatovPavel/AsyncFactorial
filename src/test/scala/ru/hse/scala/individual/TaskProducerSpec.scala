@@ -6,7 +6,7 @@ import fs2.io.file.Files
 import weaver.SimpleIOSuite
 
 object TaskProducerSpec extends SimpleIOSuite {
-  test("producer abrupt cancel then writer finishes after Shutdown") {
+  test("producer abrupt cancel then writer finishes after Shutdown") { // очень сложный, нужно проще
     for {
       tmpPath    <- Files[IO].createTempFile(None, "cancel-", ".txt", None)
       inputsRef  <- Ref.of[IO, List[String]](TestUtils.largeInputData.values.map(_.toString))

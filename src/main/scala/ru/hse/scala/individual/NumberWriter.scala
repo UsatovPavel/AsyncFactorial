@@ -8,7 +8,8 @@ import cats.implicits._
 import java.nio.charset.StandardCharsets
 
 final class NumberWriter[F[_]: Async: Files](path: Path) {
-
+//stream from Queue -> write 1 time in file
+  // можно передать функцию которая будет писать в файл для тестов не писать
   private def writeLine(line: String): F[Unit] =
     Stream
       .emits((line + "\n").getBytes(StandardCharsets.UTF_8))
