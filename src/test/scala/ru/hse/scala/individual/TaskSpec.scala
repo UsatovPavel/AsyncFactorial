@@ -17,9 +17,9 @@ object TaskSpec extends SimpleIOSuite {
 
   test("taskProducer prints Exit on exit input") {
     val program = for {
-      inputs      <- Ref.of[IO, List[String]](List("exit"))
-      outputs     <- Ref.of[IO, List[String]](List(Task.prompt))
-      console     <- TestConsole.fromRef[IO](inputs, outputs)
+      inputs  <- Ref.of[IO, List[String]](List("exit"))
+      outputs <- Ref.of[IO, List[String]](List(Task.prompt))
+      console = new TestConsole[IO](inputs, outputs)
       queue       <- Queue.unbounded[IO, ProcessMessage]
       writerFiber <- new NumberWriter[IO](Path("out.txt")).run(queue).start
       supervisorR <- Supervisor[IO].allocated
@@ -59,9 +59,9 @@ object TaskSpec extends SimpleIOSuite {
       outputFile: Path
   ): IO[ProducerResult] =
     for {
-      inputsRef   <- Ref.of[IO, List[String]](inputsList)
-      outputsRef  <- Ref.of[IO, List[String]](initialOutput)
-      console     <- TestConsole.fromRef[IO](inputsRef, outputsRef)
+      inputsRef  <- Ref.of[IO, List[String]](inputsList)
+      outputsRef <- Ref.of[IO, List[String]](initialOutput)
+      console = new TestConsole[IO](inputsRef, outputsRef)
       _           <- Task.programResource(waitForAll = true, outputFile, console).use(_ => IO.unit)
       out         <- outputsRef.get
       exists      <- Files[IO].exists(outputFile)
@@ -139,7 +139,7 @@ object TaskSpec extends SimpleIOSuite {
       for {
         inputsRef  <- Ref.of[IO, List[String]](inputStrings)
         outputsRef <- Ref.of[IO, List[String]](List.fill(inputStrings.length)(Task.prompt))
-        console    <- TestConsole.fromRef[IO](inputsRef, outputsRef)
+        console = new TestConsole[IO](inputsRef, outputsRef)
 
         // запускаем как реальную программу — resource сам отменит writer
         fiber <- Task
