@@ -7,9 +7,10 @@ import fs2.io.file.{Files, Flags, Path}
 import cats.implicits._
 import java.nio.charset.StandardCharsets
 
-/** Считывает результаты из очереди и один раз открытым потоком дописывает их в файл. */
+/** Считывает результаты из очереди и один раз открытым потоком дописывает их в файл. 
+  * Все записи идут через один открытый файловый поток.
+*/
 final class NumberWriter[F[_]: Async: Files](path: Path) {
-//stream from Queue -> write 1 time in file
   private def renderedBytes(rendered: Rendered): Stream[F, Byte] =
     rendered match {
       case Rendered.Line(line) =>
