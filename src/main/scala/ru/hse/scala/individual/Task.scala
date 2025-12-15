@@ -8,17 +8,17 @@ import fs2.io.file.Path
 /** Точка входа: поднимает очередь, два Supervisor'а и запускает Producer + Writer.
   *
   * Важная деталь для waitForAll=true:
-  * - supervisorB управляет воркерами вычисления факториала.
-  * - После того как Producer получил "exit", вызываем releaseB.
-  * - При waitForAll=true release блокируется и ждёт завершения всех supervised задач.
-  * - Только после того как все воркеры завершились и положили свои результаты в очередь,
-  *   мы отправляем Shutdown в writer, чтобы ничего не потерялось.
+  *   - supervisorB управляет воркерами вычисления факториала.
+  *   - После того как Producer получил "exit", вызываем releaseB.
+  *   - При waitForAll=true release блокируется и ждёт завершения всех supervised задач.
+  *   - Только после того как все воркеры завершились и положили свои результаты в очередь, мы отправляем Shutdown в
+  *     writer, чтобы ничего не потерялось.
   *
   * Альтернативный подход:
-  * - Можно использовать 1 Supervisor (без ручного release) + Ref[Int] для учёта активных воркеров,
-  *   затем явно ждать пока счётчик станет 0 перед отправкой Shutdown.
-  *   Это доп. синхронизация и более громоздко(добавлять Ref[Int] в TaskProducer) т.к. в текущем варианте сам Supervisor
-  *   при waitForAll=true уже умеет ждать все задачи, не нужен явный счётчик.
+  *   - Можно использовать 1 Supervisor (без ручного release) + Ref[Int] для учёта активных воркеров, затем явно ждать
+  *     пока счётчик станет 0 перед отправкой Shutdown. Это доп. синхронизация и более громоздко(добавлять Ref[Int] в
+  *     TaskProducer) т.к. в текущем варианте сам Supervisor при waitForAll=true уже умеет ждать все задачи, не нужен
+  *     явный счётчик.
   */
 object Task extends IOApp {
   val prompt                   = "Enter number:"
@@ -37,7 +37,7 @@ object Task extends IOApp {
       queue                   <- Resource.eval(Queue.unbounded[IO, ProcessMessage])
       writerFiber             <- Resource.eval(supervisorA.supervise(new NumberWriter[IO](outPath).run(queue)))
       _                       <- Resource.eval(new TaskProducer[IO](queue, supervisorB).run(input))
-      _ <- Resource.eval {
+      _                       <- Resource.eval {
         if (waitForAll) releaseB >> queue.offer(ProcessMessage.Shutdown)
         else queue.offer(ProcessMessage.Shutdown) >> releaseB
       }
