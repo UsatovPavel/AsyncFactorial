@@ -11,7 +11,7 @@ import java.util.UUID
 import scala.concurrent.duration._
 
 object NumberWriterSpec extends SimpleIOSuite {
-  val defaultPath: Path = Task.DEFAULT_PATH
+  val defaultPath: Path = Task.DefaultPath
 
   def outFileResource: Resource[IO, Path] =
     Resource.make {

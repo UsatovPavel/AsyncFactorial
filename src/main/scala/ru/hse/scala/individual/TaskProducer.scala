@@ -3,10 +3,12 @@ package ru.hse.scala.individual
 import cats.effect._
 import cats.effect.std.{Console, Queue, Supervisor}
 import cats.implicits._
-//можно представить как loop в Task, но вынесен в класс для расширяемости архитектуры
+
+/** Читает пользовательский ввод, спавнит вычисления факториала и публикует результаты в очередь. */
 final class TaskProducer[F[_]: Async: Console](
     queue: Queue[F, ProcessMessage],
-    workerSupervisor: Supervisor[F]
+    workerSupervisor: Supervisor[F],
+    activeCount: Ref[F, Int]
 ) {
 
   private val prompt  = Task.prompt
@@ -26,16 +28,21 @@ final class TaskProducer[F[_]: Async: Console](
       }
 
   private def spawnWorker(text: String): F[Unit] =
-    workerSupervisor.supervise(
-      FactorialAccumulator.inputNumber(text, queue)
-    ).void
+    activeCount.update(_ + 1) *>
+      workerSupervisor
+        .supervise(
+          FactorialAccumulator.inputNumber(text, queue)
+            .guarantee(activeCount.update(_ - 1))
+        )
+        .void
 }
 
 object TaskProducer {
 //Fiber в ресурсе new, лучше сделать приватным потому что легче менять TaskProducer
   def make[F[_]: Async: Console](
       queue: Queue[F, ProcessMessage],
-      workerSupervisor: Supervisor[F]
+      workerSupervisor: Supervisor[F],
+      activeCount: Ref[F, Int]
   ): F[TaskProducer[F]] =
-    Sync[F].pure(new TaskProducer[F](queue, workerSupervisor))
+    Sync[F].pure(new TaskProducer[F](queue, workerSupervisor, activeCount))
 }

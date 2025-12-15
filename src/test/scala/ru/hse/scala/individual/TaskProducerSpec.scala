@@ -13,11 +13,12 @@ object TaskProducerSpec extends SimpleIOSuite {
       outputsRef <- Ref.of[IO, List[String]](List.empty)
       console = new TestConsole[IO](inputsRef, outputsRef)
       queue <- Queue.unbounded[IO, ProcessMessage]
+      activeRef <- Ref.of[IO, Int](0)
       supR  <- Supervisor[IO].allocated
       sup        = supR._1
       releaseSup = supR._2
       writerFiber   <- new NumberWriter[IO](tmpPath).run(queue).start
-      producerFiber <- new TaskProducer[IO](queue, sup)(IO.asyncForIO, console).run.start
+      producerFiber <- new TaskProducer[IO](queue, sup, activeRef)(IO.asyncForIO, console).run.start
       _             <- TestUtils.waitForOutputsAtLeast(outputsRef, 1)
       _             <- producerFiber.cancel
       _             <- queue.offer(ProcessMessage.Shutdown)

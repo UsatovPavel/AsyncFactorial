@@ -7,27 +7,32 @@ import fs2.io.file.{Files, Flags, Path}
 import cats.implicits._
 import java.nio.charset.StandardCharsets
 
+/** Считывает результаты из очереди и один раз открытым потоком дописывает их в файл. */
 final class NumberWriter[F[_]: Async: Files](path: Path) {
 //stream from Queue -> write 1 time in file
-  // можно передать функцию которая будет писать в файл для тестов не писать
-  private def writeLine(line: String): F[Unit] =
+  private def renderedBytes(rendered: Rendered): Stream[F, Byte] =
+    rendered match {
+      case Rendered.Line(line) =>
+        Stream
+          .emits((line + "\n").getBytes(StandardCharsets.UTF_8))
+          .covary[F]
+      case Rendered.Stop => Stream.empty
+    }
+
+  private def messagesToBytes(queue: Queue[F, ProcessMessage]): Stream[F, Byte] =
     Stream
-      .emits((line + "\n").getBytes(StandardCharsets.UTF_8))
-      .covary[F]
+      .repeatEval(queue.take)
+      .takeWhile {
+        case ProcessMessage.Shutdown => false
+        case _                       => true
+      }
+      .flatMap(msg => renderedBytes(msg.render))
+
+  def run(queue: Queue[F, ProcessMessage]): F[Unit] =
+    messagesToBytes(queue)
       .through(Files[F].writeAll(path, Flags.Append))
       .compile
       .drain
-
-  def run(queue: Queue[F, ProcessMessage]): F[Unit] = {
-    def loop: F[Unit] =
-      queue.take.flatMap { msg =>
-        msg.render match {
-          case Rendered.Line(line) => writeLine(line) >> loop
-          case Rendered.Stop       => Concurrent[F].unit
-        }
-      }
-    loop
-  }
 }
 
 object NumberWriter {
