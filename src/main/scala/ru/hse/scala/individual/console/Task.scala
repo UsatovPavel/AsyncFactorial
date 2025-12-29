@@ -1,4 +1,4 @@
-package ru.hse.scala.individual
+package ru.hse.scala.individual.console
 
 import cats.effect._
 import cats.effect.std.{Console, Queue, Supervisor}

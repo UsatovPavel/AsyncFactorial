@@ -1,11 +1,12 @@
-package ru.hse.scala.individual
+package ru.hse.scala.individual.core
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import ru.hse.scala.individual.FactorialAccumulator.factorial
-import ru.hse.scala.individual.ParseError.{NegativeNumberError, WrongNumberError}
+import ru.hse.scala.individual.console.ProcessMessage
+import ru.hse.scala.individual.core.FactorialAccumulator.factorial
+import ru.hse.scala.individual.core.ParseError.{NegativeNumberError, WrongNumberError}
 
 class FactorialAccumulatorSpec extends AnyFlatSpec with Matchers {
   "factorial" should "return None for negative number" in {

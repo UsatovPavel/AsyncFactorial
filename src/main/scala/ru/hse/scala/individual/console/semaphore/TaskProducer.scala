@@ -1,10 +1,12 @@
-package ru.hse.scala.individual.semaphore
+package ru.hse.scala.individual.console.semaphore
 
 import cats.effect._
 import cats.effect.implicits.monadCancelOps_
 import cats.effect.std.{Console, Queue, Semaphore, Supervisor}
 import cats.implicits._
-import ru.hse.scala.individual.{FactorialAccumulator, ProcessMessage}
+import ru.hse.scala.individual.console.ProcessMessage
+import ru.hse.scala.individual.core.FactorialAccumulator
+
 //можно представить как loop в Task, но вынесен в класс для расширяемости архитектуры
 final class TaskProducer[F[_]: Async: Console](
     queue: Queue[F, ProcessMessage],

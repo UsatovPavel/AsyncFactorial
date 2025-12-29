@@ -1,9 +1,9 @@
-package ru.hse.scala.individual.semaphore
+package ru.hse.scala.individual.console.semaphore
 
 import cats.effect._
 import cats.effect.std.{Console, Queue, Supervisor}
 import fs2.io.file.Path
-import ru.hse.scala.individual.{NumberWriter, ProcessMessage}
+import ru.hse.scala.individual.console.{NumberWriter, ProcessMessage}
 
 object Task extends IOApp {
 

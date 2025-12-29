@@ -1,4 +1,5 @@
-package ru.hse.scala.individual
+package ru.hse.scala.individual.console
+import ru.hse.scala.individual.core.{FactorialResult, ParseError}
 
 sealed trait ProcessMessage {
   def render: Rendered

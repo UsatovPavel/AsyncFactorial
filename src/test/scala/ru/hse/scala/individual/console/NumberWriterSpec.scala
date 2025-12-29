@@ -1,10 +1,12 @@
-package ru.hse.scala.individual
+package ru.hse.scala.individual.console
 
 import cats.effect.kernel.Ref
 import cats.effect.std.Queue
 import cats.effect.{IO, Resource}
 import cats.implicits._
 import fs2.io.file.{Files, Path}
+import ru.hse.scala.individual.TestUtils
+import ru.hse.scala.individual.core.{FactorialResult, ParseError}
 import weaver.SimpleIOSuite
 
 import java.util.UUID

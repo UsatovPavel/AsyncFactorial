@@ -1,9 +1,9 @@
-package ru.hse.scala.individual
+package ru.hse.scala.individual.core
 
 import cats.effect.Async
 import cats.effect.std.Queue
 import cats.implicits.toFlatMapOps
-import ru.hse.scala.individual.ParseError.{CalculationError, NegativeNumberError, WrongNumberError}
+import ru.hse.scala.individual.console.ProcessMessage
 
 import scala.annotation.tailrec
 

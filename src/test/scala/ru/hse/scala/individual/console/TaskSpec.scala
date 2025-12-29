@@ -1,14 +1,14 @@
-package ru.hse.scala.individual
+package ru.hse.scala.individual.console
 
 import cats.effect._
 import cats.effect.unsafe.implicits.global
-import fs2.Stream
+import cats.implicits.catsSyntaxTuple2Semigroupal
 import fs2.io.file.{Files, Flags, Path}
-import fs2.text
+import fs2.{Stream, text}
 import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should.Matchers
-import cats.effect.Outcome
-import cats.implicits.catsSyntaxTuple2Semigroupal
+import ru.hse.scala.individual.TestUtils
+import ru.hse.scala.individual.core.{FactorialAccumulator, ParseError}
 
 import scala.concurrent.duration._
 

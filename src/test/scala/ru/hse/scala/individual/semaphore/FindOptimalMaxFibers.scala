@@ -4,7 +4,8 @@ import cats.effect._
 import cats.effect.std.{Queue, Supervisor}
 import cats.implicits.toTraverseOps
 import fs2.io.file.Files
-import ru.hse.scala.individual.{NumberWriter, ProcessMessage}
+import ru.hse.scala.individual.console.semaphore.{Task, TaskProducer}
+import ru.hse.scala.individual.console.{NumberWriter, ProcessMessage}
 
 import scala.concurrent.duration._
 import scala.util.Random

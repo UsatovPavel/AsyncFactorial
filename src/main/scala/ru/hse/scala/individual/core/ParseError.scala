@@ -1,4 +1,4 @@
-package ru.hse.scala.individual
+package ru.hse.scala.individual.core
 
 sealed trait ParseError {
   def input: String

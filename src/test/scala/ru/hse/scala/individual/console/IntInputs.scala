@@ -1,7 +1,8 @@
-package ru.hse.scala.individual
+package ru.hse.scala.individual.console
 
 import cats.effect.IO
 import fs2.Stream
+import ru.hse.scala.individual.core.{FactorialAccumulator, FactorialResult, ParseError}
 
 final case class IntInputs(values: List[Int]) {
   def toEitherBigIntList: List[Either[ParseError, BigInt]] = {

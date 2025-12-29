@@ -1,10 +1,11 @@
-package ru.hse.scala.individual
+package ru.hse.scala.individual.console
 
 import cats.effect._
 import cats.effect.std.Queue
+import cats.implicits._
 import fs2.Stream
 import fs2.io.file.{Files, Flags, Path}
-import cats.implicits._
+
 import java.nio.charset.StandardCharsets
 
 /** Считывает результаты из очереди и один раз открытым потоком дописывает их в файл. Все записи идут через один

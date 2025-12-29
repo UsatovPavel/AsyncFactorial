@@ -1,9 +1,10 @@
-package ru.hse.scala.individual
+package ru.hse.scala.individual.console
 
 import cats.effect._
 import cats.effect.std.{Queue, Supervisor}
 import cats.implicits._
 import fs2.Stream
+import ru.hse.scala.individual.core.FactorialAccumulator
 
 /** Читает поток строк, спавнит вычисления факториала и публикует результаты в очередь. */
 final class TaskProducer[F[_]: Async](

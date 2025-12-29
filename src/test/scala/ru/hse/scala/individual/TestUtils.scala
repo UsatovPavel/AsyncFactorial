@@ -1,6 +1,7 @@
 package ru.hse.scala.individual
 
 import cats.effect.{IO, Ref}
+import ru.hse.scala.individual.console.IntInputs
 
 import scala.concurrent.duration.DurationInt
 import scala.util.Random
