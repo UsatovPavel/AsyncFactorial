@@ -19,13 +19,13 @@ object FactorialAccumulator {
     val maybeNumber = line.trim.toIntOption
     maybeNumber match {
       case None =>
-        out.offer(ProcessMessage.ParseFailed(WrongNumberError(line)))
+        out.offer(ProcessMessage.ParseFailed(ParseError.WrongNumberError(line)))
       case Some(number) =>
         if (number < 0) { // guard
-          out.offer(ProcessMessage.ParseFailed(NegativeNumberError(line)))
+          out.offer(ProcessMessage.ParseFailed(ParseError.NegativeNumberError(line)))
         } else {
           Async[F].blocking(factorial(number)).flatMap {
-            case None         => out.offer(ProcessMessage.ParseFailed(CalculationError(line)))
+            case None         => out.offer(ProcessMessage.ParseFailed(ParseError.CalculationError(line)))
             case Some(result) => out.offer(ProcessMessage.Completed(FactorialResult(number, result)))
           }
         }
