@@ -1,6 +1,10 @@
 import org.typelevel.scalacoptions.{ScalaVersion, ScalacOption, ScalacOptions}
 import sbt.addCompilerPlugin
 
+import sbtassembly.AssemblyPlugin.autoImport._
+import sbtassembly.MergeStrategy
+import sbtassembly.PathList
+
 ThisBuild / version                                       := "0.1.0-SNAPSHOT"
 ThisBuild / scalaVersion                                  := "2.13.17"
 ThisBuild / scalafixDependencies += "org.typelevel"       %% "typelevel-scalafix" % "0.5.0"
@@ -44,6 +48,17 @@ lazy val root: Project = (project in file("."))
       "-Wconf:cat=lint-infer-any&msg=kind-polymorphic:s",
       _.isBetween(ScalaVersion.V2_13_0, ScalaVersion.V3_0_0),
     ),
+    Compile / packageBin / mainClass := Some("ru.hse.scala.individual.HttpTask"),
+    assembly / assemblyMergeStrategy := {
+      case PathList("META-INF", "MANIFEST.MF")                         => MergeStrategy.discard
+      case PathList("META-INF", "services", _ @ _*)                    => MergeStrategy.filterDistinctLines
+      case PathList("META-INF", "versions", "9", "module-info.class")  => MergeStrategy.first
+      case PathList("META-INF", "io.netty.versions.properties")        => MergeStrategy.first
+      case PathList("META-INF", "resources", _ @ _*)                   => MergeStrategy.first
+      case PathList("META-INF", _ @ _*)                                => MergeStrategy.discard
+      case "reference.conf"                                            => MergeStrategy.concat
+      case x                                                           => (assembly / assemblyMergeStrategy).value(x)
+    },
     addCompilerPlugin(Dependencies.kindProjector),
     addCompilerPlugin(Dependencies.bmFor),
   )
