@@ -11,8 +11,9 @@ import sttp.capabilities.fs2.Fs2Streams
 import sttp.tapir.server.ServerEndpoint
 import sttp.tapir.server.vertx.cats.VertxCatsServerInterpreter.VertxFutureToCatsF
 import sttp.tapir.server.vertx.cats.{VertxCatsServerInterpreter, VertxCatsServerOptions}
+import sttp.tapir.swagger.bundle.SwaggerInterpreter
 
-/** Minimal tapir+vertx server wiring. */
+/** Minimal tapir+vertx server wiring (based on http-sample, but simplified to one server/zone). */
 object HttpServerCats {
 
   def start[F[_]: Async: Console](
@@ -27,13 +28,17 @@ object HttpServerCats {
           .customiseInterceptors[F](dispatcher)
           .options
 
+      docsEndpoints = SwaggerInterpreter()
+        .fromServerEndpoints[F](endpoints, "factorial-service", "1.0")
+      allEndpoints = endpoints ++ docsEndpoints
+
       vertx <- Resource.make(Sync[F].delay(Vertx.vertx()))(_.close().asF[F].void)
 
       server <- Resource.make {
         Sync[F].defer {
           val httpServer = vertx.createHttpServer()
           val router     = Router.router(vertx)
-          endpoints.foreach(
+          allEndpoints.foreach(
             VertxCatsServerInterpreter(options)
               .route(_)
               .apply(router)
@@ -48,3 +53,5 @@ object HttpServerCats {
       _ <- Resource.eval(Console[F].println(s"HTTP server started on http://$host:${server.actualPort()}/"))
     } yield server
 }
+
+

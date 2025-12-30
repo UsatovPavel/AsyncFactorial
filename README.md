@@ -1,6 +1,17 @@
-# Описание
+# HTTP-сервер 
 
-Приложение: FactorialAcc<-NumberWriter<-Task
+- Запуск: `HttpTask` (IOApp), поднимает tapir + vertx сервер `0.0.0.0:8080`.
+- Endpoint: `POST /factorial`
+  - Headers: опционально `X-Job-Id` (если нет, генерируется).
+  - Body: JSON массив `Int`.
+  - Response: JSON массив объектов `{jobId,itemId,input,result?,error?}`; порядок не гарантирован.
+  - Инвариант: у каждого элемента ровно одно из `result`/`error`.
+- Swagger UI: `http://127.0.0.1:8080/docs`
+- Параллельность
+
+# Консольное приложение
+
+Консольное приложение: Task (IOApp) → TaskProducer (spawn workers) → FactorialAccumulator → Queue → NumberWriter → out.txt
 Папка semaphore в src/... и test/... не относится к рабочим файлам.
 
 На вход из консоли подается список чисел для которых нужно рассчитать факториал, необходимо
