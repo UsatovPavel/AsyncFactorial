@@ -17,8 +17,24 @@ lazy val root: Project = (project in file("."))
       Dependencies.scalaTest % Test,
       Dependencies.fs2Core,
       Dependencies.fs2Io,
+      // HTTP server 
+      Dependencies.tapir.verxServer,
+      Dependencies.tapir.cats,
+      Dependencies.tapir.jsonTethys,
+      Dependencies.tethys.jackson,
+      Dependencies.tethys.derivation,
+      // for local testing
+      Dependencies.tapir.swagger,
+    
       Dependencies.weaverCats       % Test,
-      Dependencies.weaverScalaCheck % Test
+      Dependencies.weaverScalaCheck % Test,
+      // HTTP client for integration tests
+      Dependencies.client.cats   % Test,
+      Dependencies.client.tethys % Test,
+      // JSON (tests only)
+      Dependencies.circe.core    % Test,
+      Dependencies.circe.parser  % Test,
+      Dependencies.circe.generic % Test,
     ),
     tpolecatExcludeOptions += ScalacOptions.warnNonUnitStatement,
     tpolecatScalacOptions += ScalacOption(
