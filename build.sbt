@@ -35,6 +35,9 @@ lazy val root: Project = (project in file("."))
       Dependencies.circe.core    % Test,
       Dependencies.circe.parser  % Test,
       Dependencies.circe.generic % Test,
+      // Config (server)
+      Dependencies.pureconfig.core,
+      Dependencies.pureconfig.generic,
     ),
     tpolecatExcludeOptions += ScalacOptions.warnNonUnitStatement,
     tpolecatScalacOptions += ScalacOption(

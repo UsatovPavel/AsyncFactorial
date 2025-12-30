@@ -2,20 +2,18 @@ package ru.hse.scala.individual
 
 import cats.effect.{ExitCode, IO, IOApp, Resource}
 import cats.effect.std.Console
-import ru.hse.scala.individual.http.{FactorialApi, HttpServerCats, ProcessingEngine}
+import ru.hse.scala.individual.http.{FactorialApi, HttpServerCats, ProcessingEngine, ServerConfig}
 
-/** HTTP entrypoint*/
+/** HTTP entrypoint */
 object HttpTask extends IOApp {
   override def run(args: List[String]): IO[ExitCode] = {
-    val host        = "0.0.0.0"
-    val port        = 8080
-    val parallelism = Runtime.getRuntime.availableProcessors().max(2)
+    val config = ServerConfig.loadOrThrow()
 
     val app: Resource[IO, Unit] =
       for {
-        engine <- Resource.eval(ProcessingEngine.make[IO](parallelism))
+        engine <- Resource.eval(ProcessingEngine.make[IO](config.parallelism))
         api    <- Resource.eval(FactorialApi.make[IO](engine))
-        _      <- HttpServerCats.start[IO](api.all, host, port)
+        _      <- HttpServerCats.start[IO](api.all, config.host, config.port)
       } yield ()
 
     app.use(_ => IO.never)
@@ -23,5 +21,3 @@ object HttpTask extends IOApp {
       .onCancel(Console[IO].println("HTTP server cancelled"))
   }
 }
-
-
