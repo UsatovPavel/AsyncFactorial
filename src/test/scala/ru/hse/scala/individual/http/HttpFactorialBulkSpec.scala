@@ -1,7 +1,7 @@
 package ru.hse.scala.individual.http
 
 import cats.effect.unsafe.implicits.global
-import cats.effect.{IO, Resource}
+import cats.effect.IO
 import io.circe.generic.auto._
 import io.circe.parser.decode
 import io.circe.syntax._
@@ -9,29 +9,13 @@ import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should.Matchers
 import ru.hse.scala.individual.core.ParseError
 import sttp.client4._
-import sttp.client4.httpclient.cats.HttpClientCatsBackend
 
 final class HttpFactorialBulkSpec extends AsyncFlatSpec with Matchers {
-
-  private def withClientAndServer[A](use: (Backend[IO], Int) => IO[A]): IO[A] = {
-    val host = "127.0.0.1"
-    val port = 0 // OS pick a free port
-
-    val resources: Resource[IO, (Backend[IO], Int)] =
-      for {
-        backend <- HttpClientCatsBackend.resource[IO]()
-        engine  <- Resource.eval(ProcessingEngine.make[IO](parallelism = 4))
-        api     <- Resource.eval(FactorialApi.make[IO](engine))
-        server  <- HttpServerCats.start[IO](api.all, host, port)
-      } yield (backend, server.actualPort())
-
-    resources.use { case (backend, actualPort) => use(backend, actualPort) }
-  }
 
   behavior of "POST /factorial (bulk)"
 
   it should "return N items with stable jobId and itemId coverage for a large input" in {
-    withClientAndServer { (backend, port) =>
+    HttpTestSupport.withClientAndServer(engineParallelism = 4) { (backend, port) =>
       val n       = 2000
       val jobId   = "fixed"
       val inputs  = List.tabulate(n) { idx => if (idx % 10 == 0) -1 else 10 }
@@ -70,8 +54,11 @@ final class HttpFactorialBulkSpec extends AsyncFlatSpec with Matchers {
             item.error shouldBe None
           }
         }
+
         succeed
       }
     }.unsafeToFuture()
   }
 }
+
+
