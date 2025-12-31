@@ -1,0 +1,17 @@
+target
+.bsp
+.ivy2
+.cache
+.sbt
+.idea
+.metals
+.vscode
+.direnv
+node_modules
+.git
+.github
+*.log
+project/project
+project/target
+
+

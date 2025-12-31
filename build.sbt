@@ -50,14 +50,17 @@ lazy val root: Project = (project in file("."))
     ),
     Compile / packageBin / mainClass := Some("ru.hse.scala.individual.HttpTask"),
     assembly / assemblyMergeStrategy := {
-      case PathList("META-INF", "MANIFEST.MF")                         => MergeStrategy.discard
-      case PathList("META-INF", "services", _ @ _*)                    => MergeStrategy.filterDistinctLines
-      case PathList("META-INF", "versions", "9", "module-info.class")  => MergeStrategy.first
-      case PathList("META-INF", "io.netty.versions.properties")        => MergeStrategy.first
-      case PathList("META-INF", "resources", _ @ _*)                   => MergeStrategy.first
-      case PathList("META-INF", _ @ _*)                                => MergeStrategy.discard
-      case "reference.conf"                                            => MergeStrategy.concat
-      case x                                                           => (assembly / assemblyMergeStrategy).value(x)
+      // Swagger UI (official Tapir recommendation)
+      case PathList("META-INF", "maven", "org.webjars", "swagger-ui", "pom.properties") => MergeStrategy.singleOrError
+      case PathList("META-INF", "resources", "webjars", "swagger-ui", _ @ _*)           => MergeStrategy.singleOrError
+      // Other META-INF
+      case PathList("META-INF", "MANIFEST.MF")                        => MergeStrategy.discard
+      case PathList("META-INF", "services", _ @ _*)                   => MergeStrategy.filterDistinctLines
+      case PathList("META-INF", "versions", "9", "module-info.class") => MergeStrategy.discard
+      case PathList("META-INF", "io.netty.versions.properties")       => MergeStrategy.first
+      case PathList("META-INF", xs @ _*) if xs.nonEmpty               => MergeStrategy.discard
+      case "reference.conf"                                           => MergeStrategy.concat
+      case _                                                          => MergeStrategy.first
     },
     addCompilerPlugin(Dependencies.kindProjector),
     addCompilerPlugin(Dependencies.bmFor),
