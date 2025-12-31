@@ -13,12 +13,13 @@ object Dependencies {
   val weaverScalaCheck = "org.typelevel" %% "weaver-scalacheck" % "0.11.2"
 
   object tapir {
+    // Keep versions aligned with `http-sample` to avoid binary incompatibilities.
     val version = "1.12.3"
 
-    val verxServer = "com.softwaremill.sttp.tapir" %% "tapir-vertx-server-cats" % version
-    val cats       = "com.softwaremill.sttp.tapir" %% "tapir-cats"              % version
-    val swagger    = "com.softwaremill.sttp.tapir" %% "tapir-swagger-ui-bundle" % version
-    val jsonTethys = "com.softwaremill.sttp.tapir" %% "tapir-json-tethys"       % version
+    val verxServer = "com.softwaremill.sttp.tapir" %% "tapir-vertx-server-cats"  % version
+    val cats       = "com.softwaremill.sttp.tapir" %% "tapir-cats"               % version
+    val swagger    = "com.softwaremill.sttp.tapir" %% "tapir-swagger-ui-bundle"  % version
+    val jsonTethys = "com.softwaremill.sttp.tapir" %% "tapir-json-tethys"        % version
   }
 
   object tethys {
@@ -43,5 +44,12 @@ object Dependencies {
     val core    = "io.circe" %% "circe-core"    % version
     val parser  = "io.circe" %% "circe-parser"  % version
     val generic = "io.circe" %% "circe-generic" % version
+  }
+
+  object pureconfig {
+    val version = "0.17.9"
+
+    val core    = "com.github.pureconfig" %% "pureconfig-core"    % version
+    val generic = "com.github.pureconfig" %% "pureconfig-generic" % version
   }
 }

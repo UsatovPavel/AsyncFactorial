@@ -1,6 +1,10 @@
 import org.typelevel.scalacoptions.{ScalaVersion, ScalacOption, ScalacOptions}
 import sbt.addCompilerPlugin
 
+import sbtassembly.AssemblyPlugin.autoImport._
+import sbtassembly.MergeStrategy
+import sbtassembly.PathList
+
 ThisBuild / version                                       := "0.1.0-SNAPSHOT"
 ThisBuild / scalaVersion                                  := "2.13.17"
 ThisBuild / scalafixDependencies += "org.typelevel"       %% "typelevel-scalafix" % "0.5.0"
@@ -35,12 +39,29 @@ lazy val root: Project = (project in file("."))
       Dependencies.circe.core    % Test,
       Dependencies.circe.parser  % Test,
       Dependencies.circe.generic % Test,
+      // Config (server)
+      Dependencies.pureconfig.core,
+      Dependencies.pureconfig.generic,
     ),
     tpolecatExcludeOptions += ScalacOptions.warnNonUnitStatement,
     tpolecatScalacOptions += ScalacOption(
       "-Wconf:cat=lint-infer-any&msg=kind-polymorphic:s",
       _.isBetween(ScalaVersion.V2_13_0, ScalaVersion.V3_0_0),
     ),
+    Compile / packageBin / mainClass := Some("ru.hse.scala.individual.HttpTask"),
+    assembly / assemblyMergeStrategy := {
+      // Swagger UI (official Tapir recommendation)
+      case PathList("META-INF", "maven", "org.webjars", "swagger-ui", "pom.properties") => MergeStrategy.singleOrError
+      case PathList("META-INF", "resources", "webjars", "swagger-ui", _ @ _*)           => MergeStrategy.singleOrError
+      // Other META-INF
+      case PathList("META-INF", "MANIFEST.MF")                        => MergeStrategy.discard
+      case PathList("META-INF", "services", _ @ _*)                   => MergeStrategy.filterDistinctLines
+      case PathList("META-INF", "versions", "9", "module-info.class") => MergeStrategy.discard
+      case PathList("META-INF", "io.netty.versions.properties")       => MergeStrategy.first
+      case PathList("META-INF", xs @ _*) if xs.nonEmpty               => MergeStrategy.discard
+      case "reference.conf"                                           => MergeStrategy.concat
+      case _                                                          => MergeStrategy.first
+    },
     addCompilerPlugin(Dependencies.kindProjector),
     addCompilerPlugin(Dependencies.bmFor),
   )

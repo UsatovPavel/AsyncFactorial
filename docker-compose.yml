@@ -1,0 +1,39 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: factorial-http-app:latest
+    environment:
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8080
+      # - SERVER_PARALLELISM=4 # uncomment to override default
+    ports:
+      - "8080:8080"
+    #depends_on:
+      # - kafka 
+
+  kafka:
+    image: apache/kafka:latest
+    environment:
+      - KAFKA_ENABLE_KRAFT=yes
+      - KAFKA_CFG_PROCESS_ROLES=broker,controller
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+    ports:
+      - "9092:9092"
+
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: build
+    working_dir: /app
+    command: sbt -batch -no-colors test
+    # no dependencies; HTTP tests are self-contained (no Kafka needed)
+
