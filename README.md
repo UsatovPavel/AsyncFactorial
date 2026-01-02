@@ -1,62 +1,72 @@
-# HTTP-сервер
+# AsyncFactorial
 
-- Запуск: `HttpTask` (IOApp), поднимает tapir + vertx сервер `0.0.0.0:8080`.
-- Endpoint: `POST /factorial`
-    - Headers: опционально `X-Job-Id` (если нет, генерируется).
-    - Body: JSON массив `Int`.
-    - Response: JSON массив объектов `{jobId,itemId,input,result?,error?}`; порядок не гарантирован.
-    - Инвариант: у каждого элемента ровно одно из `result`/`error`.
-- Swagger UI: `http://127.0.0.1:8080/docs`
-- Конфигурация: `application.conf` (section `server`)
-    - `host` (default `0.0.0.0`)
-    - `port` (default `8080`)
-    - `parallelism` (default 0 → `availableProcessors`)
-- Параллельность:
+Scala service for factorial processing with three modes:
+- Kafka consumer/producer: consumes `factorial.tasks`, produces to `factorial.results`.
+- HTTP server: consumes JSON and responds with factorial results.
+- Console mode: reads numbers from stdin, writes results to `out.txt` asynchronously.
 
-# Консольное приложение
+## Quick Start
+1. Clone repo into a sibling folder of PRAssign (for Go/Kafka stack):
+   ```bash
+   git clone https://github.com/UsatovPavel/AsyncFactorial.git
+   cd AsyncFactorial
+   ```
+2. Create `.env`:
+   ```ini
+   # HTTP сервис Scala 
+   SERVER_HOST=0.0.0.0
+   SERVER_PORT=8080
+   SERVER_PARALLELISM=4   # empty => use availableProcessors
 
-Консольное приложение: Task (IOApp) → TaskProducer (spawn workers) → FactorialAccumulator → Queue → NumberWriter →
-out.txt
-Папка semaphore в src/... и test/... не относится к рабочим файлам.
+   # Kafka service
+   KAFKA_BOOTSTRAP_SERVERS=kafka1:9092,kafka2:9092,kafka3:9092
+   KAFKA_GROUP_ID=asyncfactorial-consumer
+   KAFKA_INPUT_TOPIC=factorial.tasks
+   KAFKA_OUTPUT_TOPIC=factorial.results
+   CONSUMER_REPLICAS=4
 
-На вход из консоли подается список чисел для которых нужно рассчитать факториал, необходимо
-вычислить значение после чего сохранить результат в конец файла out.txt. Ввод пользователя должен быть не
-блокирующим (параллельное исполнение задний на вычисление факториала). Ввод пользователя - каждое число с новой
-строки, ввод считать законченным после ввода exit; после ввода exit нужно либо дождаться выполнения всех заданий,
-либо отменить все не завершённые задания.
-Разрешено писать в файл не в том порядке в которым задания были даны
+   KAFKA_EXPOSE_PORT=9092  # for local-kafka profile only
+   ```
+3. Run Kafka consumer (needs Go/Kafka network `prassign_default`):
+   ```bash
+   make service
+   ```
+   (reads `.env`, scales consumer to `CONSUMER_REPLICAS`).
 
-## Требования
+## Modes
+- **Kafka service**: IOApp `KafkaConsumerTask`, consumes `factorial.tasks`, publishes `factorial.results`. Config via env/application.conf.
+- **Console**:
+  - IOApp `Task` parses integers from stdin until `exit`, runs factorials concurrently (non-blocking input), appends results to `out.txt` (order not guaranteed), logs parse errors.
+  - Two modes: `waitAll=true` waits for all tasks on exit; `waitAll=false` cancels unfinished work and stops cleanly.
+  - Built on cats-effect fibers with Supervisor (lightweight, easy to spawn).
+- **HTTP**: `POST /factorial` (Tapir + Vert.x), body = JSON array of Int, optional header `X-Job-Id` (if missing, generated). Swagger: `/docs`
 
-* Какие библиотеки я могу использовать? - все кроме тех что указаны в чёрном списке (black list: `akka`, `play`,
-  `monix`)
-* Какие библиотеки посоветуете? - `cats-effect 3` или `ZIO 2` (для runtime); `sttp.client4` (для http client); `fs2`
-  (для kafka и streams); `tapir` (для http server); `circe` или `tethys` (для json); `doobie` (для db); `scalatest`(
-  +cats-effect) или  `weaver` (для тестов);
+## Tech Stack
+- **Language**: Scala 2.13
+- **Concurrency/Streams**: cats-effect 3, fs2
+- **Kafka**: fs2-kafka
+- **HTTP**: tapir 
+- **JSON**: circe
+- **Test**: scalatest (with cats-effect)
+- **Build tools**: Docker Compose (external `prassign_default`), Makefile
 
-## Code Style:
+## Env / Config
+- Defaults in `application.conf` (`server.*`, `kafka.*`).
+- Runtime overrides via env (`SERVER_*`, `KAFKA_*`, `CONSUMER_REPLICAS`, `KAFKA_EXPOSE_PORT`).
 
-* Переменные и функции должны иметь осмысленные названия;
-* Тест классы именуются `<ClassName>Spec`, где `<ClassName>` - класс к которому пишутся тесты;
-* Тест классы находятся в том же пакете, что и класс к которому пишутся тесты (например, класс `Fibonacci` находится в
-  пакете `fibonacci` в директории `src/main/scala/fibonacci`, значит его тест класс `FibonacciSpec` должен быть в том же
-  пакете в директории `src/test/scala/fibonacci`);
-* Каждый тест должен быть в отдельном test suite;
-* Использовать java коллекции запрещается (используйте `Scala` коллекции);
-* Использовать scala `mutable` коллекции запрещается (используйте `immutable` коллекции);
-* Использовать `var` запрещается (используйте `val`);
-* Использование `this` запрещается (используйте `self`, если надо);
-* Использование `throw` запрещается (используйте `Either` или `Option`);
-* Использование `try` запрещается (используйте `Either` или `ApplicativeError`);
-* Использование `null` запрещается (используйте `Option`);
-* Использование `return` запрещается;
-* Использование `System.exit` запрещается;
-* Касты или проверки на типы с помощью методов из Java вроде `asInstanceOf` запрещаются;
-* Использование циклов запрещается (используйте `for comprehension`, `tailRec`; или методы `Monad`: `iterateWhile`,
-  `foreverM` и др.; или методы коллекций `fold`/`foldLeft`/ `reduce`/ `map`/ `filter`);
-* Использование `foreach` (аналогично предыдущему пункту);
-* Использование небезопасных вызовов разрешено только в тестах (например: `.get` у `Option`, `.head`, обращение по
-  индексу);
-* Использование взятия и освобождения примитивов синхронизации: `semaphore`, `mutex` - из разных потоков запрещено;
-* Использование `require` / `assert` для ошибок запрещается (используйте `shouldBe` из scalatest и его вариации);
-* Использование аннотаций запрещается (кроме `@tailrec`);
+## Run
+- Kafka consumer: `make service` (requires `.env`, uses `KAFKA_BOOTSTRAP_SERVERS`, `CONSUMER_REPLICAS`).
+- Local single-broker profile (optional): `docker compose --profile local-kafka up`.
+- HTTP mode (if needed): `docker compose --profile http up app` (expects env `SERVER_*`).
+
+## Testing
+``` bash
+make test
+```
+- Console pipeline: TaskSpec checks input/parse/write, waitAll true/false, performance
+- Writer: NumberWriterSpec — verifies how the writer logs parse errors and normal results, and that it stops cleanly on Shutdown
+- Core: FactorialAccumulatorSpec covers factorial on valid/invalid inputs and parse errors.
+- HTTP: smoke/bulk/invalid-json/parallel/big-job-id specs for POST /factorial 
+
+## Notes
+- Compose `networks.default` is external `prassign_default` to talk to Go/Kafka stack.
