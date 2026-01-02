@@ -11,6 +11,10 @@ object Dependencies {
   val fs2Io            = "co.fs2"        %% "fs2-io"            % "3.7.0"
   val weaverCats       = "org.typelevel" %% "weaver-cats"       % "0.11.2"
   val weaverScalaCheck = "org.typelevel" %% "weaver-scalacheck" % "0.11.2"
+  // Kafka client built on FS2 + cats-effect.
+  val fs2Kafka          = "com.github.fd4s" %% "fs2-kafka"        % "3.9.1"
+  // Logging backend (SLF4J binding)
+  val logbackClassic    = "ch.qos.logback"   %  "logback-classic" % "1.2.13"
 
   object tapir {
     // Keep versions aligned with `http-sample` to avoid binary incompatibilities.

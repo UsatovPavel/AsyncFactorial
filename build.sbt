@@ -21,6 +21,8 @@ lazy val root: Project = (project in file("."))
       Dependencies.scalaTest % Test,
       Dependencies.fs2Core,
       Dependencies.fs2Io,
+      Dependencies.fs2Kafka,
+      Dependencies.logbackClassic,
       // HTTP server 
       Dependencies.tapir.verxServer,
       Dependencies.tapir.cats,
